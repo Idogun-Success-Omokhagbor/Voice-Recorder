@@ -3,6 +3,9 @@ package org.fossify.voicerecorder.activities
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
@@ -17,18 +20,14 @@ import org.fossify.commons.extensions.onPageChangeListener
 import org.fossify.commons.extensions.onTabSelectionChanged
 import org.fossify.commons.extensions.toast
 import org.fossify.commons.extensions.updateBottomTabItemColors
-import org.fossify.commons.helpers.LICENSE_ANDROID_LAME
-import org.fossify.commons.helpers.LICENSE_AUDIO_RECORD_VIEW
-import org.fossify.commons.helpers.LICENSE_AUTOFITTEXTVIEW
-import org.fossify.commons.helpers.LICENSE_EVENT_BUS
 import org.fossify.commons.helpers.PERMISSION_RECORD_AUDIO
 import org.fossify.commons.helpers.PERMISSION_WRITE_STORAGE
 import org.fossify.commons.helpers.isRPlus
-import org.fossify.commons.models.FAQItem
 import org.fossify.voicerecorder.BuildConfig
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.adapters.ViewPagerAdapter
 import org.fossify.voicerecorder.databinding.ActivityMainBinding
+import org.fossify.voicerecorder.dialogs.AboutDialog
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
 import org.fossify.voicerecorder.extensions.ensureStoragePermission
@@ -38,10 +37,16 @@ import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
+import kotlin.system.exitProcess
 
 class MainActivity : SimpleActivity() {
+    companion object {
+        private const val EXIT_AFTER_SAVE_DELAY_MS = 500L
+        private const val EXIT_AFTER_EMAIL_SAVE_DELAY_MS = 1500L
+    }
 
     private var bus: EventBus? = null
+    private var handledRecordAfterLaunch = false
 
     override var isSearchBarEnabled = true
 
@@ -65,31 +70,21 @@ class MainActivity : SimpleActivity() {
             deleteExpiredTrashedRecordings()
         }
 
-        handlePermission(PERMISSION_RECORD_AUDIO) {
-            if (it) {
-                tryInitVoiceRecorder()
-            } else {
-                toast(org.fossify.commons.R.string.no_audio_permissions)
-                finish()
-            }
-        }
+        tryInitVoiceRecorder()
 
         bus = EventBus.getDefault()
         bus!!.register(this)
-        if (config.recordAfterLaunch && !RecorderService.isRunning) {
-            Intent(this@MainActivity, RecorderService::class.java).apply {
-                try {
-                    startService(this)
-                } catch (ignored: Exception) {
-                }
-            }
-        }
     }
 
     override fun onResume() {
         super.onResume()
         updateMenuColors()
-        if (getPagerAdapter()?.showRecycleBin != config.useRecycleBin) {
+        val pagerAdapter = getPagerAdapter()
+        if (pagerAdapter == null) {
+            return
+        }
+
+        if (pagerAdapter.showRecycleBin != config.useRecycleBin) {
             setupViewPager()
         }
         setupTabColors()
@@ -98,7 +93,7 @@ class MainActivity : SimpleActivity() {
 
     override fun onPause() {
         super.onPause()
-        config.lastUsedViewPagerPage = binding.viewPager.currentItem
+        config.lastUsedViewPagerPage = 0
     }
 
     override fun onDestroy() {
@@ -167,9 +162,16 @@ class MainActivity : SimpleActivity() {
 
     private fun tryInitVoiceRecorder() {
         if (isRPlus()) {
-            ensureStoragePermission { granted ->
+            val shouldConfirmFolder = shouldConfirmRecordingFolderOnLaunch()
+            ensureStoragePermission(
+                forceDefaultFolderConfirmation = shouldConfirmFolder
+            ) { granted ->
                 if (granted) {
-                    setupViewPager()
+                    if (shouldConfirmFolder) {
+                        config.defaultRecordingFolderConfirmed = true
+                        config.openedSettingsOnFirstUse = false
+                    }
+                    handleAudioPermissionAndSetup()
                 } else {
                     toast(org.fossify.commons.R.string.no_storage_permissions)
                     finish()
@@ -178,11 +180,22 @@ class MainActivity : SimpleActivity() {
         } else {
             handlePermission(PERMISSION_WRITE_STORAGE) {
                 if (it) {
-                    setupViewPager()
+                    handleAudioPermissionAndSetup()
                 } else {
                     toast(org.fossify.commons.R.string.no_storage_permissions)
                     finish()
                 }
+            }
+        }
+    }
+
+    private fun handleAudioPermissionAndSetup() {
+        handlePermission(PERMISSION_RECORD_AUDIO) {
+            if (it) {
+                setupViewPager()
+            } else {
+                toast(org.fossify.commons.R.string.no_audio_permissions)
+                finish()
             }
         }
     }
@@ -246,8 +259,46 @@ class MainActivity : SimpleActivity() {
         if (isThirdPartyIntent()) {
             binding.viewPager.currentItem = 0
         } else {
-            binding.viewPager.currentItem = config.lastUsedViewPagerPage
-            binding.mainTabsHolder.getTabAt(config.lastUsedViewPagerPage)?.select()
+            config.lastUsedViewPagerPage = 0
+            binding.viewPager.currentItem = 0
+            binding.mainTabsHolder.getTabAt(0)?.select()
+            openSettingsOnFirstUse()
+        }
+
+        startRecordingAfterLaunchIfNeeded()
+    }
+
+    private fun startRecordingAfterLaunchIfNeeded() {
+        if (handledRecordAfterLaunch) {
+            return
+        }
+
+        handledRecordAfterLaunch = true
+        if (config.recordAfterLaunch && !RecorderService.isRunning) {
+            Intent(this@MainActivity, RecorderService::class.java).apply {
+                try {
+                    startService(this)
+                } catch (ignored: Exception) {
+                }
+            }
+        }
+    }
+
+    private fun shouldOpenSettingsOnFirstUse() = !config.openedSettingsOnFirstUse && !isThirdPartyIntent()
+
+    private fun shouldConfirmRecordingFolderOnLaunch() =
+        !config.defaultRecordingFolderConfirmed && !isThirdPartyIntent()
+
+    private fun openSettingsOnFirstUse() {
+        if (!shouldOpenSettingsOnFirstUse()) {
+            return
+        }
+
+        config.openedSettingsOnFirstUse = true
+        Handler(Looper.getMainLooper()).post {
+            if (!isFinishing && !isDestroyed) {
+                launchSettings()
+            }
         }
     }
 
@@ -274,44 +325,7 @@ class MainActivity : SimpleActivity() {
     }
 
     private fun launchAbout() {
-        val licenses = LICENSE_EVENT_BUS or
-                LICENSE_AUDIO_RECORD_VIEW or
-                LICENSE_ANDROID_LAME or
-                LICENSE_AUTOFITTEXTVIEW
-
-        val faqItems = arrayListOf(
-            FAQItem(
-                title = R.string.faq_1_title,
-                text = R.string.faq_1_text
-            ),
-            FAQItem(
-                title = org.fossify.commons.R.string.faq_9_title_commons,
-                text = org.fossify.commons.R.string.faq_9_text_commons
-            )
-        )
-
-        if (!resources.getBoolean(org.fossify.commons.R.bool.hide_google_relations)) {
-            faqItems.add(
-                FAQItem(
-                    title = org.fossify.commons.R.string.faq_2_title_commons,
-                    text = org.fossify.commons.R.string.faq_2_text_commons
-                )
-            )
-            faqItems.add(
-                FAQItem(
-                    title = org.fossify.commons.R.string.faq_6_title_commons,
-                    text = org.fossify.commons.R.string.faq_6_text_commons
-                )
-            )
-        }
-
-        startAboutActivity(
-            appNameId = R.string.app_name,
-            licenseMask = licenses,
-            versionName = BuildConfig.VERSION_NAME,
-            faqItems = faqItems,
-            showFAQBeforeMail = true
-        )
+        AboutDialog(this)
     }
 
     private fun isThirdPartyIntent() = intent?.action == MediaStore.Audio.Media.RECORD_SOUND_ACTION
@@ -326,6 +340,17 @@ class MainActivity : SimpleActivity() {
                 setResult(Activity.RESULT_OK, this)
             }
             finish()
+        } else {
+            val exitDelay = if (event.isEmail) EXIT_AFTER_EMAIL_SAVE_DELAY_MS else EXIT_AFTER_SAVE_DELAY_MS
+            exitAppProcessAfterSave(exitDelay)
         }
+    }
+
+    private fun exitAppProcessAfterSave(delayMs: Long) {
+        Handler(Looper.getMainLooper()).postDelayed({
+            finishAndRemoveTask()
+            Process.killProcess(Process.myPid())
+            exitProcess(0)
+        }, delayMs)
     }
 }

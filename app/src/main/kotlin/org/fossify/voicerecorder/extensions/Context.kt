@@ -87,7 +87,7 @@ fun Context.getDefaultRecordingsRelativePath(): String {
     return if (isQPlus()) {
         "${Environment.DIRECTORY_MUSIC}/$DEFAULT_RECORDINGS_FOLDER"
     } else {
-        getString(R.string.app_name)
+        DEFAULT_RECORDINGS_FOLDER
     }
 }
 

@@ -26,7 +26,10 @@ import org.fossify.voicerecorder.databinding.FragmentRecorderBinding
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.ensureStoragePermission
 import org.fossify.voicerecorder.extensions.setKeepScreenAwake
+import org.fossify.voicerecorder.dialogs.RecordEmailAddressDialog
+import org.fossify.voicerecorder.activities.SimpleActivity
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
+import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDING_PAUSED
 import org.fossify.voicerecorder.helpers.RECORDING_RUNNING
@@ -102,6 +105,7 @@ class RecorderFragment(
 
         binding.cancelRecordingButton.setDebouncedClickListener { showCancelRecordingDialog() }
         binding.saveRecordingButton.setDebouncedClickListener { saveRecording() }
+        binding.recordingEmailButton.setDebouncedClickListener { emailRecording() }
         Intent(context, RecorderService::class.java).apply {
             action = GET_RECORDER_INFO
             try {
@@ -195,6 +199,42 @@ class RecorderFragment(
         refreshView()
     }
 
+    private fun emailRecording() {
+        val activity = context as? SimpleActivity ?: return
+        if (status == RECORDING_STOPPED || !activity.config.recordAndEmail) {
+            return
+        }
+
+        val existingAddress = activity.config.recordingEmailAddress
+        if (existingAddress.isBlank()) {
+            promptForRecordingEmailAddress()
+        } else {
+            sendRecordingByEmail()
+        }
+    }
+
+    private fun promptForRecordingEmailAddress() {
+        val activity = context as? SimpleActivity ?: return
+        RecordEmailAddressDialog(
+            activity = activity,
+            initialAddress = activity.config.recordingEmailAddress,
+            callback = {
+                activity.config.recordingEmailAddress = it
+                sendRecordingByEmail()
+            },
+            onDismiss = {}
+        )
+    }
+
+    private fun sendRecordingByEmail() {
+        status = RECORDING_STOPPED
+        Intent(context, RecorderService::class.java).apply {
+            action = EMAIL_RECORDING
+            context.startService(this)
+        }
+        refreshView()
+    }
+
     private fun getPauseBlinkTask() = object : TimerTask() {
         override fun run() {
             if (status == RECORDING_PAUSED) {
@@ -212,6 +252,7 @@ class RecorderFragment(
         binding.toggleRecordingButton.setImageDrawable(getToggleButtonIcon())
         binding.saveRecordingButton.beVisibleIf(status != RECORDING_STOPPED)
         binding.cancelRecordingButton.beVisibleIf(status != RECORDING_STOPPED)
+        binding.recordingEmailButton.beVisibleIf(status != RECORDING_STOPPED && context.config.recordAndEmail)
         pauseBlinkTimer.cancel()
 
         when (status) {

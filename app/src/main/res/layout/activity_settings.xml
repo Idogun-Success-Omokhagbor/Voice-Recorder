@@ -172,6 +172,21 @@
             </RelativeLayout>
 
             <RelativeLayout
+                android:id="@+id/settings_record_and_email_holder"
+                style="@style/SettingsHolderSwitchStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyMaterialSwitch
+                    android:id="@+id/settings_record_and_email"
+                    style="@style/SettingsSwitchStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/record_and_email" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
                 android:id="@+id/settings_keep_screen_on_holder"
                 style="@style/SettingsHolderSwitchStyle"
                 android:layout_width="match_parent"

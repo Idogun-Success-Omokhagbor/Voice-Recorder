@@ -25,6 +25,7 @@ import org.fossify.commons.models.RadioItem
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.databinding.ActivitySettingsBinding
 import org.fossify.voicerecorder.dialogs.FilenamePatternDialog
+import org.fossify.voicerecorder.dialogs.RecordEmailAddressDialog
 import org.fossify.voicerecorder.dialogs.MoveRecordingsDialog
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteTrashedRecordings
@@ -35,8 +36,8 @@ import org.fossify.voicerecorder.helpers.BITRATES
 import org.fossify.voicerecorder.helpers.DEFAULT_BITRATE
 import org.fossify.voicerecorder.helpers.DEFAULT_SAMPLING_RATE
 import org.fossify.voicerecorder.helpers.EXTENSION_M4A
-import org.fossify.voicerecorder.helpers.EXTENSION_MP3
 import org.fossify.voicerecorder.helpers.EXTENSION_OGG
+import org.fossify.voicerecorder.helpers.EXTENSION_MP3
 import org.fossify.voicerecorder.helpers.SAMPLING_RATES
 import org.fossify.voicerecorder.helpers.SAMPLING_RATE_BITRATE_LIMITS
 import org.fossify.voicerecorder.models.Events
@@ -70,6 +71,7 @@ class SettingsActivity : SimpleActivity() {
         setupSaveRecordingsFolder()
         setupFilenamePattern()
         setupExtension()
+        setupRecordAndEmail()
         setupBitrate()
         setupSamplingRate()
         setupMicrophoneMode()
@@ -179,15 +181,18 @@ class SettingsActivity : SimpleActivity() {
     }
 
     private fun setupExtension() {
+        if (config.extension == EXTENSION_MP3) {
+            config.extension = EXTENSION_M4A
+        }
+
         binding.settingsExtension.text = config.getExtensionText()
         binding.settingsExtensionHolder.setOnClickListener {
             val items = arrayListOf(
                 RadioItem(EXTENSION_M4A, getString(R.string.m4a)),
-                RadioItem(EXTENSION_MP3, getString(R.string.mp3_experimental))
+                RadioItem(EXTENSION_OGG, getString(R.string.ogg_opus))
             )
-
-            if (isQPlus()) {
-                items.add(RadioItem(EXTENSION_OGG, getString(R.string.ogg_opus)))
+            if (isQPlus().not()) {
+                items.removeAt(items.size - 1)
             }
 
             RadioGroupDialog(this@SettingsActivity, items, config.extension) {
@@ -197,6 +202,41 @@ class SettingsActivity : SimpleActivity() {
                 adjustSamplingRate()
             }
         }
+    }
+
+    private fun setupRecordAndEmail() {
+        binding.settingsRecordAndEmail.isChecked = config.recordAndEmail
+        binding.settingsRecordAndEmailHolder.setOnClickListener {
+            binding.settingsRecordAndEmail.toggle()
+            val enabled = binding.settingsRecordAndEmail.isChecked
+
+            if (enabled) {
+                showRecordEmailAddressDialog(
+                    onAddressSaved = {
+                        config.recordingEmailAddress = it
+                        config.recordAndEmail = true
+                    },
+                    onAddressDismissed = {
+                        binding.settingsRecordAndEmail.isChecked = false
+                        config.recordAndEmail = false
+                    }
+                )
+            } else {
+                config.recordAndEmail = false
+            }
+        }
+    }
+
+    private fun showRecordEmailAddressDialog(
+        onAddressSaved: (String) -> Unit,
+        onAddressDismissed: () -> Unit
+    ) {
+        RecordEmailAddressDialog(
+            activity = this,
+            initialAddress = config.recordingEmailAddress,
+            callback = onAddressSaved,
+            onDismiss = onAddressDismissed
+        )
     }
 
     private fun setupBitrate() {

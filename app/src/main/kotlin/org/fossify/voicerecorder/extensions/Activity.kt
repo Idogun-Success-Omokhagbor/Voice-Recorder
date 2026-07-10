@@ -10,6 +10,7 @@ import org.fossify.commons.extensions.createDocumentUriUsingFirstParentTreeUri
 import org.fossify.commons.extensions.createSAFDirectorySdk30
 import org.fossify.commons.extensions.deleteFile
 import org.fossify.commons.extensions.getDoesFilePathExistSdk30
+import org.fossify.commons.extensions.getParentPath
 import org.fossify.commons.extensions.hasProperStoredFirstParentUri
 import org.fossify.commons.extensions.toFileDirItem
 import org.fossify.commons.helpers.DAY_SECONDS
@@ -29,20 +30,71 @@ fun Activity.setKeepScreenAwake(keepScreenOn: Boolean) {
     }
 }
 
-fun BaseSimpleActivity.ensureStoragePermission(callback: (result: Boolean) -> Unit) {
-    if (isRPlus() && !hasProperStoredFirstParentUri(config.saveRecordingsFolder)) {
+fun BaseSimpleActivity.ensureStoragePermission(
+    forceDefaultFolderConfirmation: Boolean = false,
+    callback: (result: Boolean) -> Unit
+) {
+    if (
+        isRPlus() &&
+        (forceDefaultFolderConfirmation || !hasProperStoredFirstParentUri(config.saveRecordingsFolder))
+    ) {
+        val targetFolder = config.saveRecordingsFolder
+        val defaultFolder = getDefaultRecordingsFolder()
+        val pickerStartFolder = if (targetFolder == defaultFolder) {
+            targetFolder.getParentPath()
+        } else {
+            targetFolder
+        }
+
         StoragePermissionDialog(this) {
-            launchFolderPicker(config.saveRecordingsFolder) { newPath ->
-                if (!newPath.isNullOrEmpty()) {
-                    config.saveRecordingsFolder = newPath
-                    callback(true)
-                } else {
-                    callback(false)
+            if (forceDefaultFolderConfirmation && targetFolder == defaultFolder) {
+                requestFolderAccess(pickerStartFolder) { granted ->
+                    if (granted) {
+                        if (!getDoesFilePathExistSdk30(targetFolder)) {
+                            createSAFDirectorySdk30(targetFolder)
+                        }
+                        config.saveRecordingsFolder = targetFolder
+                    }
+
+                    callback(granted)
+                }
+            } else {
+                launchFolderPicker(pickerStartFolder) { newPath ->
+                    if (!newPath.isNullOrEmpty()) {
+                        val confirmedFolder = if (targetFolder == defaultFolder && newPath == pickerStartFolder) {
+                            if (!getDoesFilePathExistSdk30(targetFolder)) {
+                                createSAFDirectorySdk30(targetFolder)
+                            }
+                            targetFolder
+                        } else {
+                            newPath
+                        }
+                        config.saveRecordingsFolder = confirmedFolder
+                        callback(true)
+                    } else {
+                        callback(false)
+                    }
                 }
             }
         }
     } else {
         callback(true)
+    }
+}
+
+private fun BaseSimpleActivity.requestFolderAccess(
+    path: String,
+    callback: (granted: Boolean) -> Unit
+) {
+    handleSAFDialog(path) { grantedSAF ->
+        if (!grantedSAF) {
+            callback(false)
+            return@handleSAFDialog
+        }
+
+        handleSAFDialogSdk30(path, showRationale = false) { grantedSAF30 ->
+            callback(grantedSAF30)
+        }
     }
 }
 

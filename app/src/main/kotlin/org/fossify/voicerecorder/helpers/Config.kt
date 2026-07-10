@@ -10,11 +10,27 @@ import org.fossify.voicerecorder.extensions.getDefaultRecordingsFolder
 
 class Config(context: Context) : BaseConfig(context) {
     companion object {
+        private const val PREVIOUS_DEFAULT_RECORDINGS_FOLDER = "Recordings"
+        private const val PREVIOUS_LEGACY_DEFAULT_RECORDINGS_FOLDER = "Fossify Voice Recorder"
+
         fun newInstance(context: Context) = Config(context)
     }
 
     var saveRecordingsFolder: String
-        get() = prefs.getString(SAVE_RECORDINGS, context.getDefaultRecordingsFolder())!!
+        get() {
+            val defaultFolder = context.getDefaultRecordingsFolder()
+            val savedFolder = prefs.getString(SAVE_RECORDINGS, defaultFolder)!!
+            val savedFolderName = savedFolder.substringAfterLast("/")
+            return if (
+                savedFolderName == PREVIOUS_DEFAULT_RECORDINGS_FOLDER ||
+                savedFolderName == PREVIOUS_LEGACY_DEFAULT_RECORDINGS_FOLDER
+            ) {
+                prefs.edit { putString(SAVE_RECORDINGS, defaultFolder) }
+                defaultFolder
+            } else {
+                savedFolder
+            }
+        }
         set(saveRecordingsFolder) = prefs.edit().putString(SAVE_RECORDINGS, saveRecordingsFolder)
             .apply()
 
@@ -48,6 +64,18 @@ class Config(context: Context) : BaseConfig(context) {
     var recordAfterLaunch: Boolean
         get() = prefs.getBoolean(RECORD_AFTER_LAUNCH, false)
         set(recordAfterLaunch) = prefs.edit().putBoolean(RECORD_AFTER_LAUNCH, recordAfterLaunch)
+            .apply()
+
+    var openedSettingsOnFirstUse: Boolean
+        get() = prefs.getBoolean(OPENED_SETTINGS_ON_FIRST_USE, false)
+        set(openedSettingsOnFirstUse) = prefs.edit()
+            .putBoolean(OPENED_SETTINGS_ON_FIRST_USE, openedSettingsOnFirstUse)
+            .apply()
+
+    var defaultRecordingFolderConfirmed: Boolean
+        get() = prefs.getBoolean(DEFAULT_RECORDING_FOLDER_CONFIRMED, false)
+        set(defaultRecordingFolderConfirmed) = prefs.edit()
+            .putBoolean(DEFAULT_RECORDING_FOLDER_CONFIRMED, defaultRecordingFolderConfirmed)
             .apply()
 
     fun getExtensionText() = context.getString(
@@ -100,4 +128,13 @@ class Config(context: Context) : BaseConfig(context) {
     var filenamePattern: String
         get() = prefs.getString(FILENAME_PATTERN, DEFAULT_FILENAME_PATTERN)!!
         set(filenamePattern) = prefs.edit { putString(FILENAME_PATTERN, filenamePattern) }
+
+    var recordAndEmail: Boolean
+        get() = prefs.getBoolean(RECORD_AND_EMAIL, false)
+        set(recordAndEmail) = prefs.edit().putBoolean(RECORD_AND_EMAIL, recordAndEmail).apply()
+
+    var recordingEmailAddress: String
+        get() = prefs.getString(RECORDING_EMAIL_ADDRESS, "")!!
+        set(recordingEmailAddress) = prefs.edit().putString(RECORDING_EMAIL_ADDRESS, recordingEmailAddress)
+            .apply()
 }
