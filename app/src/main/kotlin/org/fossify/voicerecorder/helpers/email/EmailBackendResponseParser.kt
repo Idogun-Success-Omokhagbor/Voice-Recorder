@@ -39,27 +39,20 @@ internal object EmailBackendResponseParser {
             )
         }
 
-        if (!parsedObject.has("success")) {
-            return EmailBackendResponse(
+        val successValue = parsedObject.opt("success")
+        return when {
+            !parsedObject.has("success") -> EmailBackendResponse(
                 success = false,
                 message = message,
                 failure = EmailBackendResponseFailure.MISSING_SUCCESS
             )
-        }
-
-        val successValue = parsedObject.opt("success")
-        if (successValue !is Boolean) {
-            return EmailBackendResponse(
+            successValue !is Boolean -> EmailBackendResponse(
                 success = false,
                 message = message,
                 failure = EmailBackendResponseFailure.INVALID_SUCCESS_TYPE
             )
-        }
-
-        return if (successValue) {
-            EmailBackendResponse(success = true, message = message)
-        } else {
-            EmailBackendResponse(
+            successValue -> EmailBackendResponse(success = true, message = message)
+            else -> EmailBackendResponse(
                 success = false,
                 message = message,
                 failure = EmailBackendResponseFailure.REJECTED

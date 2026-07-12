@@ -34,7 +34,9 @@ import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDING_PAUSED
 import org.fossify.voicerecorder.helpers.RECORDING_RUNNING
 import org.fossify.voicerecorder.helpers.RECORDING_STOPPED
+import org.fossify.voicerecorder.helpers.SAVE_RECORDING
 import org.fossify.voicerecorder.helpers.TOGGLE_PAUSE
+import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
@@ -60,10 +62,6 @@ class RecorderFragment(
 
     override fun onResume() {
         setupColors()
-        if (RecorderService.currentStatus == RECORDING_STOPPED) {
-            status = RECORDING_STOPPED
-        }
-
         refreshView()
     }
 
@@ -198,7 +196,8 @@ class RecorderFragment(
     private fun saveRecording() {
         status = RECORDING_STOPPED
         Intent(context, RecorderService::class.java).apply {
-            context.stopService(this)
+            action = SAVE_RECORDING
+            context.startService(this)
         }
         refreshView()
     }
@@ -210,7 +209,7 @@ class RecorderFragment(
         }
 
         val existingAddress = activity.config.recordingEmailAddress
-        if (existingAddress.isBlank()) {
+        if (!EmailAddressValidator.isValid(existingAddress)) {
             promptForRecordingEmailAddress()
         } else {
             sendRecordingByEmail()

@@ -22,6 +22,7 @@ internal enum class BackendConfigurationError {
 internal object BackendConfigurationValidator {
     private val localHosts = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
+    @Suppress("ReturnCount")
     fun validate(
         endpointUrl: String,
         token: String,

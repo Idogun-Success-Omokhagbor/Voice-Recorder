@@ -31,7 +31,6 @@ import org.fossify.voicerecorder.dialogs.StoragePermissionDialog
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
 import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
-import org.fossify.voicerecorder.helpers.RECORDING_STOPPED
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
@@ -296,7 +295,7 @@ class MainActivity : SimpleActivity() {
     }
 
     private fun startRecordingIfConfigured() {
-        if (config.recordAfterLaunch && RecorderService.currentStatus == RECORDING_STOPPED) {
+        if (config.recordAfterLaunch) {
             Intent(this@MainActivity, RecorderService::class.java).apply {
                 try {
                     startService(this)

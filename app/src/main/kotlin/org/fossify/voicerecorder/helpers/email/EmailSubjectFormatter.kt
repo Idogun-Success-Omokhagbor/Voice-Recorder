@@ -17,6 +17,8 @@ internal object EmailSubjectFormatter {
     }
 
     fun subject(clock: Clock = Clock.systemDefaultZone()): String {
-        return "$SUBJECT_PREFIX${timestamp(clock)}"
+        return subject(timestamp(clock))
     }
+
+    fun subject(timestamp: String) = "$SUBJECT_PREFIX$timestamp"
 }

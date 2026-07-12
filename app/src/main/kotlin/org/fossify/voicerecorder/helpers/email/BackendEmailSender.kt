@@ -11,6 +11,9 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.UUID
 
+private const val MULTIPART_PREFIX = "--"
+private const val LINE_END = "\r\n"
+
 class BackendEmailSender(
     private val context: Context,
     private val endpointUrl: String = BuildConfig.EMAIL_BACKEND_URL,
@@ -21,8 +24,6 @@ class BackendEmailSender(
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 45_000
         private const val MAX_UPLOAD_SIZE_BYTES = 25L * 1024L * 1024L
-        private const val MULTIPART_PREFIX = "--"
-        private const val LINE_END = "\r\n"
         private const val HTTP_UNPROCESSABLE_ENTITY = 422
         private const val HTTP_SUCCESS_MIN = 200
         private const val HTTP_SUCCESS_MAX = 299
@@ -80,6 +81,7 @@ class BackendEmailSender(
                     output.writeFormField(boundary, "timestamp", request.timestamp)
                     output.writeFormField(boundary, "mimeType", request.mimeType)
                     output.writeFilePart(
+                        context = context,
                         boundary = boundary,
                         fieldName = "recording",
                         fileName = request.fileName.ifBlank { resolveFileName(request) },
@@ -107,41 +109,6 @@ class BackendEmailSender(
         }
     }
 
-    private fun BufferedOutputStream.writeFormField(
-        boundary: String,
-        name: String,
-        value: String
-    ) {
-        writeString("$MULTIPART_PREFIX$boundary$LINE_END")
-        writeString("Content-Disposition: form-data; name=\"$name\"$LINE_END")
-        writeString("Content-Type: text/plain; charset=UTF-8$LINE_END$LINE_END")
-        writeString(value)
-        writeString(LINE_END)
-    }
-
-    private fun BufferedOutputStream.writeFilePart(
-        boundary: String,
-        fieldName: String,
-        fileName: String,
-        mimeType: String,
-        request: EmailSendRequest
-    ) {
-        writeString("$MULTIPART_PREFIX$boundary$LINE_END")
-        val safeFileName = fileName.sanitizeHeaderValue()
-        writeString(
-            "Content-Disposition: form-data; name=\"$fieldName\"; filename=\"$safeFileName\"$LINE_END"
-        )
-        writeString("Content-Type: $mimeType$LINE_END$LINE_END")
-        context.contentResolver.openInputStream(request.recordingUri)?.use { input ->
-            input.copyTo(this)
-        } ?: throw IOException("Recording could not be opened")
-        writeString(LINE_END)
-    }
-
-    private fun BufferedOutputStream.writeString(value: String) {
-        write(value.toByteArray(Charsets.UTF_8))
-    }
-
     private fun HttpURLConnection.readResponseBody(responseCode: Int): String {
         val stream = if (responseCode in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX) inputStream else errorStream
         return stream?.bufferedReader()?.use { it.readText() }.orEmpty()
@@ -149,24 +116,24 @@ class BackendEmailSender(
 
     private fun parseResponse(responseCode: Int, responseBody: String): EmailSendResult {
         val parsedResponse = EmailBackendResponseParser.parse(responseCode, responseBody)
-        if (parsedResponse.success) {
-            return EmailSendResult(true, context.getString(R.string.email_sent_successfully))
-        }
-
-        if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED || responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
-            return failure(R.string.email_backend_auth_failed)
-        }
-
-        if (responseCode == HttpURLConnection.HTTP_BAD_REQUEST || responseCode == HTTP_UNPROCESSABLE_ENTITY) {
-            return failure(R.string.email_backend_invalid_recipient)
-        }
-
-        if (responseCode !in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX) {
-            return failure(R.string.email_backend_server_error)
-        }
-
-        return when (parsedResponse.failure) {
-            EmailBackendResponseFailure.REJECTED -> failure(R.string.email_backend_failed)
+        return when {
+            parsedResponse.success -> {
+                EmailSendResult(true, context.getString(R.string.email_sent_successfully))
+            }
+            responseCode == HttpURLConnection.HTTP_UNAUTHORIZED ||
+                responseCode == HttpURLConnection.HTTP_FORBIDDEN -> {
+                failure(R.string.email_backend_auth_failed)
+            }
+            responseCode == HttpURLConnection.HTTP_BAD_REQUEST ||
+                responseCode == HTTP_UNPROCESSABLE_ENTITY -> {
+                failure(R.string.email_backend_invalid_recipient)
+            }
+            responseCode !in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX -> {
+                failure(R.string.email_backend_server_error)
+            }
+            parsedResponse.failure == EmailBackendResponseFailure.REJECTED -> {
+                failure(R.string.email_backend_failed)
+            }
             else -> failure(R.string.email_backend_invalid_response)
         }
     }
@@ -223,5 +190,42 @@ class BackendEmailSender(
 
     private fun failure(messageId: Int) = EmailSendResult(false, context.getString(messageId))
 
-    private fun String.sanitizeHeaderValue() = replace("\"", "'").replace("\r", "").replace("\n", "")
 }
+
+private fun BufferedOutputStream.writeFormField(
+    boundary: String,
+    name: String,
+    value: String
+) {
+    writeString("$MULTIPART_PREFIX$boundary$LINE_END")
+    writeString("Content-Disposition: form-data; name=\"$name\"$LINE_END")
+    writeString("Content-Type: text/plain; charset=UTF-8$LINE_END$LINE_END")
+    writeString(value)
+    writeString(LINE_END)
+}
+
+private fun BufferedOutputStream.writeFilePart(
+    context: Context,
+    boundary: String,
+    fieldName: String,
+    fileName: String,
+    mimeType: String,
+    request: EmailSendRequest
+) {
+    writeString("$MULTIPART_PREFIX$boundary$LINE_END")
+    val safeFileName = fileName.sanitizeHeaderValue()
+    writeString(
+        "Content-Disposition: form-data; name=\"$fieldName\"; filename=\"$safeFileName\"$LINE_END"
+    )
+    writeString("Content-Type: $mimeType$LINE_END$LINE_END")
+    context.contentResolver.openInputStream(request.recordingUri)?.use { input ->
+        input.copyTo(this)
+    } ?: throw IOException("Recording could not be opened")
+    writeString(LINE_END)
+}
+
+private fun BufferedOutputStream.writeString(value: String) {
+    write(value.toByteArray(Charsets.UTF_8))
+}
+
+private fun String.sanitizeHeaderValue() = replace("\"", "'").replace("\r", "").replace("\n", "")

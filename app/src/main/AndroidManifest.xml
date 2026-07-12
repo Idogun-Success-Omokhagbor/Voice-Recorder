@@ -118,6 +118,10 @@
                 <action android:name="org.fossify.voicerecorder.action.GET_RECORDER_INFO" />
                 <action android:name="org.fossify.voicerecorder.action.STOP_AMPLITUDE_UPDATE" />
                 <action android:name="org.fossify.voicerecorder.action.TOGGLE_PAUSE" />
+                <action android:name="org.fossify.voicerecorder.action.TOGGLE_RECORDING" />
+                <action android:name="org.fossify.voicerecorder.action.SAVE_RECORDING" />
+                <action android:name="org.fossify.voicerecorder.action.CANCEL_RECORDING" />
+                <action android:name="org.fossify.voicerecorder.action.EMAIL_RECORDING" />
             </intent-filter>
         </service>
 

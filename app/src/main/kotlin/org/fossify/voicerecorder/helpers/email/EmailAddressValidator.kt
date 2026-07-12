@@ -19,13 +19,10 @@ internal object EmailAddressValidator {
 
         val localPart = candidate.substring(0, atIndex)
         val domain = candidate.substring(atIndex + 1)
-        if (
-            localPart.length > MAX_LOCAL_PART_LENGTH ||
-            localPart.startsWith('.') ||
-            localPart.endsWith('.') ||
-            ".." in localPart ||
-            !localPartPattern.matches(localPart)
-        ) {
+        val hasInvalidLength = localPart.length > MAX_LOCAL_PART_LENGTH
+        val hasInvalidDots = localPart.startsWith('.') || localPart.endsWith('.') || ".." in localPart
+        val hasInvalidCharacters = !localPartPattern.matches(localPart)
+        if (hasInvalidLength || hasInvalidDots || hasInvalidCharacters) {
             return false
         }
 

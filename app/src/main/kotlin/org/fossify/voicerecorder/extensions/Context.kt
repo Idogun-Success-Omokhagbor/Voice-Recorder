@@ -298,11 +298,11 @@ fun Context.createMediaStoreRecordingUri(fileName: String, mimeType: String): Ur
     return contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
 }
 
-fun Context.finishPendingMediaStoreRecording(uri: Uri) {
+fun Context.finishPendingMediaStoreRecording(uri: Uri): Boolean {
     val values = ContentValues().apply {
         put(MediaStore.Audio.Media.IS_PENDING, 0)
     }
-    contentResolver.update(uri, values, null, null)
+    return contentResolver.update(uri, values, null, null) > 0
 }
 
 private fun Context.readRecordingFromFile(file: DocumentFile): Recording {
