@@ -4,6 +4,7 @@
     <string name="confirm_recording_folder">Voice Recorder Plus will create and use the Voice Recorder Plus folder for recordings. Tap OK to continue with the required permissions.</string>
     <string name="move_recordings">Move recordings</string>
     <string name="move_recordings_to_new_folder_desc">You have existing recordings. Do you want to move them to your new folder?</string>
+    <string name="move_recordings_failed">Some recordings could not be moved. The recording folder was not changed.</string>
     <string name="recording_saved_successfully">Recording saved successfully</string>
     <string name="recording_too_short">Recording was too short to record!</string>
     <string name="recording">Recording</string>

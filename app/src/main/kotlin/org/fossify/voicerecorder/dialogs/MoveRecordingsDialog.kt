@@ -5,6 +5,7 @@ import org.fossify.commons.activities.BaseSimpleActivity
 import org.fossify.commons.extensions.getAlertDialogBuilder
 import org.fossify.commons.extensions.getProperPrimaryColor
 import org.fossify.commons.extensions.setupDialogStuff
+import org.fossify.commons.extensions.toast
 import org.fossify.commons.helpers.MEDIUM_ALPHA
 import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.voicerecorder.R
@@ -16,10 +17,11 @@ class MoveRecordingsDialog(
     private val activity: BaseSimpleActivity,
     private val previousFolder: String,
     private val newFolder: String,
-    private val callback: () -> Unit
+    private val callback: (success: Boolean) -> Unit
 ) {
     private lateinit var dialog: AlertDialog
     private var didFinish = false
+    private var result = true
     private val binding = DialogMoveRecordingsBinding.inflate(activity.layoutInflater).apply {
         message.setText(R.string.move_recordings_to_new_folder_desc)
         progressIndicator.setIndicatorColor(activity.getProperPrimaryColor())
@@ -36,7 +38,7 @@ class MoveRecordingsDialog(
                     titleId = R.string.move_recordings
                 ) {
                     dialog = it
-                    dialog.setOnDismissListener { finishOnce() }
+                    dialog.setOnDismissListener { finishOnce(result) }
                     dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
                         dialog.dismiss()
                     }
@@ -68,21 +70,25 @@ class MoveRecordingsDialog(
                 recordingsToMove = activity.getAllRecordings(),
                 sourceParent = previousFolder,
                 destinationParent = newFolder
-            ) {
+            ) { success ->
                 activity.runOnUiThread {
-                    finishOnce()
+                    result = success
+                    if (!success) {
+                        activity.toast(R.string.move_recordings_failed)
+                    }
+                    finishOnce(success)
                     dialog.dismiss()
                 }
             }
         }
     }
 
-    private fun finishOnce() {
+    private fun finishOnce(success: Boolean) {
         if (didFinish) {
             return
         }
 
         didFinish = true
-        callback()
+        callback(success)
     }
 }

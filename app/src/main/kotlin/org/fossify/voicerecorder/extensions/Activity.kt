@@ -23,6 +23,8 @@ import org.fossify.commons.helpers.isQPlus
 import org.fossify.commons.helpers.isRPlus
 import org.fossify.commons.models.FileDirItem
 import org.fossify.voicerecorder.dialogs.StoragePermissionDialog
+import org.fossify.voicerecorder.helpers.storage.LegacyMoveExpectation
+import org.fossify.voicerecorder.helpers.storage.LegacyMoveVerifier
 import org.fossify.voicerecorder.models.Recording
 import java.io.File
 
@@ -313,17 +315,38 @@ private fun BaseSimpleActivity.moveRecordingsLegacy(
     destinationParent: String,
     callback: (success: Boolean) -> Unit
 ) {
+    val expectations = LegacyMoveVerifier.createExpectations(recordings, destinationParent)
+    if (!LegacyMoveVerifier.canCopy(expectations)) {
+        callback(false)
+        return
+    }
+
     copyMoveFilesTo(
         fileDirItems = recordings
             .map { File(it.path).toFileDirItem(this) }
             .toMutableList() as ArrayList<FileDirItem>,
         source = sourceParent,
         destination = destinationParent,
-        isCopyOperation = false,
+        isCopyOperation = true,
         copyPhotoVideoOnly = false,
         copyHidden = false
     ) {
-        callback(true)
+        if (!LegacyMoveVerifier.copiesVerified(expectations)) {
+            cleanupFailedLegacyCopies(expectations)
+            callback(false)
+            return@copyMoveFilesTo
+        }
+
+        expectations.forEach { expectation ->
+            deleteFile(expectation.source.toFileDirItem(this))
+        }
+        callback(LegacyMoveVerifier.moveVerified(expectations))
+    }
+}
+
+private fun cleanupFailedLegacyCopies(expectations: Collection<LegacyMoveExpectation>) {
+    expectations.forEach { expectation ->
+        expectation.destination.delete()
     }
 }
 

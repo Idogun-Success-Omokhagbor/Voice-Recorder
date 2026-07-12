@@ -153,10 +153,12 @@ class SettingsActivity : SimpleActivity() {
                                     activity = this,
                                     previousFolder = currentFolder,
                                     newFolder = newFolder
-                                ) {
-                                    config.saveRecordingsFolder = newFolder
-                                    binding.settingsSaveRecordings.text =
-                                        humanizePath(config.saveRecordingsFolder)
+                                ) { success ->
+                                    if (success) {
+                                        config.saveRecordingsFolder = newFolder
+                                        binding.settingsSaveRecordings.text =
+                                            humanizePath(config.saveRecordingsFolder)
+                                    }
                                 }
                             } else {
                                 config.saveRecordingsFolder = newFolder
