@@ -38,7 +38,12 @@
     <string name="recording_email_subject">Recording - %1$s</string>
     <string name="invalid_email_address">Enter a valid email address</string>
     <string name="email_backend_not_configured">Silent email sending is not configured. Set VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL and rebuild.</string>
+    <string name="email_backend_invalid_url">The silent email backend URL is invalid. The recording was saved locally.</string>
     <string name="email_backend_requires_https">Silent email sending requires an HTTPS backend URL.</string>
+    <string name="email_backend_token_not_configured">Silent email authentication is not configured. Set VOICE_RECORDER_PLUS_EMAIL_BACKEND_TOKEN and rebuild.</string>
+    <string name="email_backend_token_invalid">The silent email authentication token is invalid. The recording was saved locally.</string>
+    <string name="email_backend_attachment_too_large">The recording exceeds the 25 MB email limit and was saved locally.</string>
+    <string name="email_backend_unsupported_attachment">This recording format is not accepted by the email backend.</string>
     <string name="email_backend_timeout">The email server timed out. The recording was saved locally.</string>
     <string name="email_backend_network_error">The email server could not be reached. The recording was saved locally.</string>
     <string name="email_backend_auth_failed">The email server rejected the request. Check backend authentication.</string>

@@ -8,37 +8,57 @@ import java.io.BufferedOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
-import java.net.URL
 import java.net.UnknownHostException
 import java.util.UUID
 
 class BackendEmailSender(
     private val context: Context,
-    private val endpointUrl: String = BuildConfig.EMAIL_BACKEND_URL
+    private val endpointUrl: String = BuildConfig.EMAIL_BACKEND_URL,
+    private val backendToken: String = BuildConfig.EMAIL_BACKEND_TOKEN,
+    private val allowUnauthenticated: Boolean = BuildConfig.EMAIL_ALLOW_UNAUTHENTICATED
 ) : EmailSender {
     companion object {
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 45_000
+        private const val MAX_UPLOAD_SIZE_BYTES = 25L * 1024L * 1024L
         private const val MULTIPART_PREFIX = "--"
         private const val LINE_END = "\r\n"
         private const val HTTP_UNPROCESSABLE_ENTITY = 422
         private const val HTTP_SUCCESS_MIN = 200
         private const val HTTP_SUCCESS_MAX = 299
+        private val supportedMimeTypes = setOf(
+            "audio/mp4",
+            "audio/m4a",
+            "audio/x-m4a",
+            "audio/ogg",
+            "audio/opus",
+            "application/ogg"
+        )
     }
 
     override fun send(request: EmailSendRequest): EmailSendResult {
-        if (endpointUrl.isBlank()) {
-            return failure(R.string.email_backend_not_configured)
+        val configuration = BackendConfigurationValidator.validate(
+            endpointUrl = endpointUrl,
+            token = backendToken,
+            allowUnauthenticated = allowUnauthenticated
+        )
+        if (configuration is BackendConfigurationResult.Invalid) {
+            return configurationFailure(configuration.error)
+        }
+
+        configuration as BackendConfigurationResult.Valid
+        if (request.mimeType.lowercase() !in supportedMimeTypes) {
+            return failure(R.string.email_backend_unsupported_attachment)
+        }
+
+        val attachmentSize = resolveFileSize(request)
+        if (attachmentSize > MAX_UPLOAD_SIZE_BYTES) {
+            return failure(R.string.email_backend_attachment_too_large)
         }
 
         return try {
-            val endpoint = URL(endpointUrl)
-            if (!endpoint.isHttpsOrLocalhost()) {
-                return failure(R.string.email_backend_requires_https)
-            }
-
             val boundary = "VoiceRecorderPlus-${UUID.randomUUID()}"
-            val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+            val connection = (configuration.endpoint.openConnection() as HttpURLConnection).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
                 readTimeout = READ_TIMEOUT_MS
                 requestMethod = "POST"
@@ -48,6 +68,9 @@ class BackendEmailSender(
                 setChunkedStreamingMode(0)
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                configuration.authorizationHeader?.let {
+                    setRequestProperty("Authorization", it)
+                }
             }
 
             try {
@@ -125,6 +148,11 @@ class BackendEmailSender(
     }
 
     private fun parseResponse(responseCode: Int, responseBody: String): EmailSendResult {
+        val parsedResponse = EmailBackendResponseParser.parse(responseCode, responseBody)
+        if (parsedResponse.success) {
+            return EmailSendResult(true, context.getString(R.string.email_sent_successfully))
+        }
+
         if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED || responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
             return failure(R.string.email_backend_auth_failed)
         }
@@ -137,12 +165,21 @@ class BackendEmailSender(
             return failure(R.string.email_backend_server_error)
         }
 
-        val normalizedBody = responseBody.lowercase()
-        return if (normalizedBody.contains("\"success\"") && normalizedBody.contains("true")) {
-            EmailSendResult(true, context.getString(R.string.email_sent_successfully))
-        } else {
-            failure(R.string.email_backend_invalid_response)
+        return when (parsedResponse.failure) {
+            EmailBackendResponseFailure.REJECTED -> failure(R.string.email_backend_failed)
+            else -> failure(R.string.email_backend_invalid_response)
         }
+    }
+
+    private fun configurationFailure(error: BackendConfigurationError): EmailSendResult {
+        val messageId = when (error) {
+            BackendConfigurationError.MISSING_URL -> R.string.email_backend_not_configured
+            BackendConfigurationError.INVALID_URL -> R.string.email_backend_invalid_url
+            BackendConfigurationError.INSECURE_URL -> R.string.email_backend_requires_https
+            BackendConfigurationError.MISSING_TOKEN -> R.string.email_backend_token_not_configured
+            BackendConfigurationError.INVALID_TOKEN -> R.string.email_backend_token_invalid
+        }
+        return failure(messageId)
     }
 
     private fun resolveFileName(request: EmailSendRequest): String {
@@ -161,11 +198,30 @@ class BackendEmailSender(
         } ?: "recording"
     }
 
-    private fun failure(messageId: Int) = EmailSendResult(false, context.getString(messageId))
+    private fun resolveFileSize(request: EmailSendRequest): Long {
+        val queriedSize = context.contentResolver.query(
+            request.recordingUri,
+            arrayOf(OpenableColumns.SIZE),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        }
+        if (queriedSize != null && queriedSize >= 0L) {
+            return queriedSize
+        }
 
-    private fun URL.isHttpsOrLocalhost(): Boolean {
-        return protocol == "https" || host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2"
+        return try {
+            context.contentResolver.openAssetFileDescriptor(request.recordingUri, "r")
+                ?.use { it.length }
+                ?: -1L
+        } catch (_: Exception) {
+            -1L
+        }
     }
 
-    private fun String.sanitizeHeaderValue() = replace("\"", "'")
+    private fun failure(messageId: Int) = EmailSendResult(false, context.getString(messageId))
+
+    private fun String.sanitizeHeaderValue() = replace("\"", "'").replace("\r", "").replace("\n", "")
 }

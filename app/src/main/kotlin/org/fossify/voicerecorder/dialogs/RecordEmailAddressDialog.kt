@@ -2,12 +2,12 @@ package org.fossify.voicerecorder.dialogs
 
 import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.doAfterTextChanged
-import android.util.Patterns
 import org.fossify.commons.extensions.getAlertDialogBuilder
 import org.fossify.commons.extensions.setupDialogStuff
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.databinding.DialogRecordEmailAddressBinding
 import org.fossify.voicerecorder.activities.SimpleActivity
+import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
 
 class RecordEmailAddressDialog(
     private val activity: SimpleActivity,
@@ -44,7 +44,7 @@ class RecordEmailAddressDialog(
 
                     alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val emailAddress = binding.recordEmailAddressValue.text.toString().trim()
-                        if (emailAddress.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(emailAddress).matches()) {
+                        if (!EmailAddressValidator.isValid(emailAddress)) {
                             binding.recordEmailAddressValue.error = activity.getString(R.string.invalid_email_address)
                             return@setOnClickListener
                         }
@@ -59,7 +59,7 @@ class RecordEmailAddressDialog(
 
     private fun updatePositiveButtonState() {
         val emailAddress = binding.recordEmailAddressValue.text.toString().trim()
-        val isValid = emailAddress.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(emailAddress).matches()
+        val isValid = EmailAddressValidator.isValid(emailAddress)
         dialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isValid
         binding.recordEmailAddressValue.error = null
     }

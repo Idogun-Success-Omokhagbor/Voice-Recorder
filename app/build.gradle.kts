@@ -22,12 +22,22 @@ fun hasSigningVars(): Boolean {
             && providers.environmentVariable("SIGNING_STORE_PASSWORD").orNull != null
 }
 
-val emailBackendUrl = providers.gradleProperty("VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL")
-    .orElse(providers.environmentVariable("VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL"))
+fun configuredValue(name: String) = providers.gradleProperty(name)
+    .orElse(providers.environmentVariable(name))
     .orElse("")
     .get()
+
+fun String.asBuildConfigString() = this
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
+
+val emailBackendUrl = configuredValue("VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL")
+    .asBuildConfigString()
+val emailBackendToken = configuredValue("VOICE_RECORDER_PLUS_EMAIL_BACKEND_TOKEN")
+    .asBuildConfigString()
+val allowUnauthenticatedEmailBackend =
+    configuredValue("VOICE_RECORDER_PLUS_EMAIL_ALLOW_UNAUTHENTICATED")
+        .equals("true", ignoreCase = true)
 
 base {
     val versionCode = project.property("VERSION_CODE").toString().toInt()
@@ -45,6 +55,12 @@ android {
         versionCode = project.property("VERSION_CODE").toString().toInt()
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "EMAIL_BACKEND_URL", "\"$emailBackendUrl\"")
+        buildConfigField("String", "EMAIL_BACKEND_TOKEN", "\"$emailBackendToken\"")
+        buildConfigField(
+            "boolean",
+            "EMAIL_ALLOW_UNAUTHENTICATED",
+            allowUnauthenticatedEmailBackend.toString()
+        )
     }
 
     signingConfigs {
@@ -154,4 +170,6 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.autofittextview)
     detektPlugins(libs.compose.detekt)
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
 }

@@ -19,6 +19,9 @@ commons = "6.1.6"
 audiorecordview = "1.0.5"
 #AutofitTextView
 autofittextview = "0.2.1"
+#Tests
+junit = "4.13.2"
+json = "20250517"
 #Gradle
 gradlePlugins-agp = "9.2.1"
 #build
@@ -42,6 +45,9 @@ eventbus = { module = "org.greenrobot:eventbus", version.ref = "eventbus" }
 audiorecordview = { module = "com.github.Armen101:AudioRecordView", version.ref = "audiorecordview" }
 #AutofitTextView
 autofittextview = { module = "me.grantland:autofittextview", version.ref = "autofittextview" }
+#Tests
+junit = { module = "junit:junit", version.ref = "junit" }
+json = { module = "org.json:json", version.ref = "json" }
 [plugins]
 android = { id = "com.android.application", version.ref = "gradlePlugins-agp" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
