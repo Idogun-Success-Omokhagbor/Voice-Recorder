@@ -235,8 +235,12 @@ class RecordingsAdapter(
     fun updateCurrentRecording(newId: Int) {
         val oldId = currRecordingId
         currRecordingId = newId
-        notifyItemChanged(recordings.indexOfFirst { it.id == oldId })
-        notifyItemChanged(recordings.indexOfFirst { it.id == newId })
+        recordings.indexOfFirst { it.id == oldId }
+            .takeIf { it >= 0 }
+            ?.let { notifyItemChanged(it) }
+        recordings.indexOfFirst { it.id == newId }
+            .takeIf { it >= 0 }
+            ?.let { notifyItemChanged(it) }
     }
 
     private fun getSelectedItems(): ArrayList<Recording> {

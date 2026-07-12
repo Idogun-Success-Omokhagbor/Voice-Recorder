@@ -6,16 +6,18 @@ import androidx.core.net.toUri
 import org.fossify.commons.extensions.getAlertDialogBuilder
 import org.fossify.commons.extensions.setupDialogStuff
 import org.fossify.commons.extensions.toast
+import org.fossify.voicerecorder.BuildConfig
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.activities.SimpleActivity
 import org.fossify.voicerecorder.databinding.DialogAboutCustomBinding
 
 class AboutDialog(private val activity: SimpleActivity) {
     companion object {
-        private const val SOURCE_CODE_URL = "https://github.com/FossifyOrg/Voice-Recorder"
+        private const val SOURCE_CODE_URL = "https://github.com/Idogun-Success-Omokhagbor/Voice-Recorder"
     }
 
     private val binding = DialogAboutCustomBinding.inflate(activity.layoutInflater).apply {
+        aboutVersion.text = activity.getString(R.string.about_version, BuildConfig.VERSION_NAME)
         aboutGithub.setOnClickListener {
             openSourceCode()
         }

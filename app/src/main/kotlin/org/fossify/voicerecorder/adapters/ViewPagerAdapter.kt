@@ -34,6 +34,8 @@ class ViewPagerAdapter(
 
     override fun destroyItem(container: ViewGroup, position: Int, item: Any) {
         container.removeView(item as View)
+        fragments[position]?.onDestroy()
+        fragments.remove(position)
     }
 
     override fun getCount() = if (showRecycleBin) 3 else 2
@@ -42,14 +44,15 @@ class ViewPagerAdapter(
 
     fun onResume() {
         for (i in 0 until fragments.size()) {
-            fragments[i].onResume()
+            fragments.valueAt(i).onResume()
         }
     }
 
     fun onDestroy() {
         for (i in 0 until fragments.size()) {
-            fragments[i].onDestroy()
+            fragments.valueAt(i).onDestroy()
         }
+        fragments.clear()
     }
 
     fun finishActMode() {

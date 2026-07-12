@@ -1,53 +1,47 @@
-# Fossify Voice Recorder
+# Voice Recorder Plus
 
-<img alt="Logo" src="graphics/icon.webp" width="120" />
+Voice Recorder Plus is a fork of [Fossify Voice Recorder](https://github.com/FossifyOrg/Voice-Recorder).
 
-<a href="https://play.google.com/store/apps/details?id=org.fossify.voicerecorder"><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height=80/></a> <a href="https://f-droid.org/packages/org.fossify.voicerecorder/"><img src="https://fdroid.gitlab.io/artwork/badge/get-it-on-en.svg" alt="Get it on F-Droid" height=80/></a> <a href="https://apt.izzysoft.de/fdroid/index/apk/org.fossify.voicerecorder"><img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" alt="Get it on IzzyOnDroid" height=80/></a>
+Modified source repository:
 
-Introducing Fossify Voice Recorder – where capturing crystal-clear audio and preserving precious moments is effortless and enjoyable. Seamlessly blend
-simplicity with functionality as you embark on a journey of seamless recording experiences tailored to your needs.
+https://github.com/Idogun-Success-Omokhagbor/Voice-Recorder
 
-**🔊 HIGH-QUALITY AUDIO CAPTURE:**  
-Remember every word, every note, and every emotion with pristine audio quality. Fossify Voice Recorder empowers you to capture high-fidelity recordings
-effortlessly, ensuring that every detail is preserved with clarity and precision.
+## Recording Folder
 
-**🎙️ VERSATILE RECORDING OPTIONS:**  
-From voice memos to musical inspirations, this intuitive app transforms your device into a versatile recording studio. Explore the freedom to document your
-surroundings and unleash your creativity with ease.
+The default recording folder is:
 
-**🚀 NO-FUSS FUNCTIONALITY:**  
-Enjoy a clutter-free experience with Fossify Voice Recorder. Say goodbye to unnecessary features and hello to a streamlined interface designed for intuitive
-navigation and seamless recording.
+```text
+Music/Voice Recorder Plus
+```
 
-**📊 INTUITIVE VISUALIZATION:**  
-Immerse yourself in the recording process with real-time sound volume visualization. Experience the thrill of monitoring your recordings with a sleek,
-interactive display that enhances your recording experience.
+On Android 10 and newer, default recordings are created through MediaStore so the first-run setup does not need to show Android's general folder picker. Android still owns the wording of system permission dialogs.
 
-**🔒 PRIVACY-FIRST APPROACH:**  
-Rest easy knowing that your privacy is our priority. Fossify Voice Recorder operates offline, ensuring maximum privacy, security, and stability without the need
-for internet access. Your recordings remain confidential and under your control at all times.
+## Silent Email Sending
 
-**🎨 CUSTOMIZABLE INTERFACE:**  
-Personalize your recording experience with customizable colors and themes. Embrace the sleek elegance of material design and dark theme options, offering a
-visually stunning experience tailored to your preferences.
+Android email apps cannot silently send a message, cannot confirm that the user pressed Send, and cannot return a reliable success result. Voice Recorder Plus therefore uses a configurable HTTPS backend for the Record and email feature.
 
-**🤝 USER-FRIENDLY FEATURES:**  
-Discover intuitive functionalities like customizable filename formats and practical widgets for quick recordings. With Fossify Voice Recorder, the power to
-record is in your hands.
+Set the backend endpoint at build time with either a Gradle property or environment variable:
 
-**🌐 AD-FREE & OPEN-SOURCE:**  
-Say goodbye to intrusive ads and unnecessary permissions. Fossify Voice Recorder is ad-free, fully open-source, and grants you the freedom to use the app as you
-please, without compromise.
+```text
+VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL=https://example.com/voice-recorder-plus/email
+```
 
-Capture moments, preserve memories, and unleash your creativity with Fossify Voice Recorder. Download now and experience recording like never before.
+The app sends a `multipart/form-data` POST containing:
 
-➡️ Explore more Fossify apps: https://www.fossify.org<br>
-➡️ Open-Source Code: https://www.github.com/FossifyOrg<br>
-➡️ Join the community on Reddit: https://www.reddit.com/r/Fossify<br>
-➡️ Connect on Telegram: https://t.me/Fossify
+```text
+recipient: saved recipient email address
+subject: Recording - yyyy-MM-dd HH:mm:ss
+timestamp: yyyy-MM-dd HH:mm:ss
+mimeType: recording MIME type
+recording: audio attachment
+```
 
-<div align="center">
-<img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_en-US.png" width="30%">
-<img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_en-US.png" width="30%">
-<img alt="App image" src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_en-US.png" width="30%">
-</div>
+Expected successful response:
+
+```json
+{"success": true}
+```
+
+Any non-2xx response, timeout, network failure, authentication failure, malformed response, or `success` value other than `true` is treated as a send failure. On failure, the recording remains saved locally, the app stays open, and no success vibration is triggered.
+
+Do not commit backend credentials or API keys to this repository.

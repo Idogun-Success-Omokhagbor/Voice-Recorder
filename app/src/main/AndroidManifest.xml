@@ -4,6 +4,7 @@
     android:installLocation="auto">
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -22,21 +23,12 @@
         android:name="android.permission.USE_FINGERPRINT"
         tools:node="remove" />
 
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="mailto" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="message/rfc822" />
-        </intent>
-    </queries>
-
     <application
         android:name="org.fossify.commons.FossifyApp"
         android:allowBackup="true"
         android:appCategory="audio"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"

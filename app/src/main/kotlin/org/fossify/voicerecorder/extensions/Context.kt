@@ -1,6 +1,8 @@
 package org.fossify.voicerecorder.extensions
 
 import android.appwidget.AppWidgetManager
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -10,6 +12,7 @@ import android.graphics.drawable.Drawable
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Environment
+import android.provider.MediaStore
 import android.provider.DocumentsContract
 import androidx.core.graphics.createBitmap
 import androidx.documentfile.provider.DocumentFile
@@ -91,9 +94,44 @@ fun Context.getDefaultRecordingsRelativePath(): String {
     }
 }
 
+fun Context.getDefaultRecordingsRelativePathWithSeparator() =
+    "${getDefaultRecordingsRelativePath().trimEnd('/')}/"
+
+fun Context.ensureDefaultRecordingsFolderExists(): Boolean {
+    val folder = File(getDefaultRecordingsFolder())
+    return folder.exists() || folder.mkdirs() || isQPlus()
+}
+
+fun Context.shouldUseMediaStoreRecordings(): Boolean {
+    return isQPlus() && config.saveRecordingsFolder == getDefaultRecordingsFolder()
+}
+
+fun Context.getPreviousDefaultRecordingFolders(): List<String> {
+    val oldRelativePaths = listOf(
+        "${Environment.DIRECTORY_MUSIC}/Recordings",
+        "${Environment.DIRECTORY_MUSIC}/Fossify Voice Recorder",
+        "Recordings",
+        "Fossify Voice Recorder"
+    )
+
+    return oldRelativePaths
+        .map { "$internalStoragePath/$it" }
+        .distinct()
+}
+
+private fun Context.getMediaStoreRecordingRelativePaths(): List<String> {
+    return listOf(
+        getDefaultRecordingsRelativePathWithSeparator(),
+        "${Environment.DIRECTORY_MUSIC}/Recordings/",
+        "${Environment.DIRECTORY_MUSIC}/Fossify Voice Recorder/"
+    ).distinct()
+}
+
 fun Context.hasRecordings(): Boolean {
     val recordingsFolder = config.saveRecordingsFolder
-    return if (isRPlus()) {
+    return if (shouldUseMediaStoreRecordings()) {
+        getMediaStoreRecordings(trashed = false).isNotEmpty()
+    } else if (isRPlus()) {
         getDocumentSdk30(recordingsFolder)
             ?.listFiles()
             ?.any { it.isAudioRecording() }
@@ -107,7 +145,9 @@ fun Context.hasRecordings(): Boolean {
 }
 
 fun Context.getAllRecordings(trashed: Boolean = false): ArrayList<Recording> {
-    return if (isRPlus()) {
+    return if (shouldUseMediaStoreRecordings()) {
+        getMediaStoreRecordings(trashed)
+    } else if (isRPlus()) {
         val recordings = arrayListOf<Recording>()
         recordings.addAll(getRecordings(trashed))
         if (trashed) {
@@ -161,32 +201,108 @@ private fun Context.getMediaStoreTrashedRecordings(): ArrayList<Recording> {
 
 private fun Context.getLegacyRecordings(trashed: Boolean = false): ArrayList<Recording> {
     val recordings = ArrayList<Recording>()
-    val folder = if (trashed) {
-        trashFolder
+    val folders = if (trashed) {
+        listOf(trashFolder)
     } else {
-        config.saveRecordingsFolder
+        listOf(config.saveRecordingsFolder) + getPreviousDefaultRecordingFolders()
     }
-    val files = File(folder).listFiles() ?: return recordings
 
-    files.filter { it.isAudioFast() }.forEach {
-        val id = it.hashCode()
-        val title = it.name
-        val path = it.absolutePath
-        val timestamp = it.lastModified()
-        val duration = getDuration(it.absolutePath) ?: 0
-        val size = it.length().toInt()
-        recordings.add(
-            Recording(
-                id = id,
-                title = title,
-                path = path,
-                timestamp = timestamp,
-                duration = duration,
-                size = size
+    folders.distinct().forEach { folder ->
+        val files = File(folder).listFiles() ?: return@forEach
+        files.filter { it.isAudioFast() }.forEach {
+            val id = it.hashCode()
+            val title = it.name
+            val path = it.absolutePath
+            val timestamp = it.lastModified()
+            val duration = getDuration(it.absolutePath) ?: 0
+            val size = it.length().toInt()
+            recordings.add(
+                Recording(
+                    id = id,
+                    title = title,
+                    path = path,
+                    timestamp = timestamp,
+                    duration = duration,
+                    size = size
+                )
             )
-        )
+        }
     }
     return recordings
+}
+
+private fun Context.getMediaStoreRecordings(trashed: Boolean): ArrayList<Recording> {
+    val recordings = ArrayList<Recording>()
+    val projection = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.DISPLAY_NAME,
+        MediaStore.Audio.Media.DATE_MODIFIED,
+        MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.SIZE,
+        MediaStore.Audio.Media.RELATIVE_PATH
+    )
+    val relativePaths = getMediaStoreRecordingRelativePaths()
+    val pathSelection = relativePaths.joinToString(" OR ") {
+        "${MediaStore.Audio.Media.RELATIVE_PATH}=?"
+    }
+    val selection = if (isRPlus()) {
+        "($pathSelection) AND ${MediaStore.Audio.Media.IS_TRASHED}=?"
+    } else {
+        pathSelection
+    }
+    val selectionArgs = if (isRPlus()) {
+        relativePaths + if (trashed) "1" else "0"
+    } else {
+        relativePaths
+    }
+
+    contentResolver.query(
+        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+        projection,
+        selection,
+        selectionArgs.toTypedArray(),
+        "${MediaStore.Audio.Media.DATE_MODIFIED} DESC"
+    )?.use { cursor ->
+        val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+        val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+        val modifiedIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+        val durationIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+        val sizeIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+
+        while (cursor.moveToNext()) {
+            val id = cursor.getLong(idIndex)
+            val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+            recordings.add(
+                Recording(
+                    id = id.hashCode(),
+                    title = cursor.getString(nameIndex),
+                    path = uri.toString(),
+                    timestamp = cursor.getLong(modifiedIndex) * 1000L,
+                    duration = (cursor.getLong(durationIndex) / 1000L).toInt(),
+                    size = cursor.getLong(sizeIndex).toInt()
+                )
+            )
+        }
+    }
+
+    return recordings
+}
+
+fun Context.createMediaStoreRecordingUri(fileName: String, mimeType: String): Uri? {
+    val values = ContentValues().apply {
+        put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+        put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
+        put(MediaStore.Audio.Media.RELATIVE_PATH, getDefaultRecordingsRelativePathWithSeparator())
+        put(MediaStore.Audio.Media.IS_PENDING, 1)
+    }
+    return contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+}
+
+fun Context.finishPendingMediaStoreRecording(uri: Uri) {
+    val values = ContentValues().apply {
+        put(MediaStore.Audio.Media.IS_PENDING, 0)
+    }
+    contentResolver.update(uri, values, null, null)
 }
 
 private fun Context.readRecordingFromFile(file: DocumentFile): Recording {

@@ -19,6 +19,7 @@ class MoveRecordingsDialog(
     private val callback: () -> Unit
 ) {
     private lateinit var dialog: AlertDialog
+    private var didFinish = false
     private val binding = DialogMoveRecordingsBinding.inflate(activity.layoutInflater).apply {
         message.setText(R.string.move_recordings_to_new_folder_desc)
         progressIndicator.setIndicatorColor(activity.getProperPrimaryColor())
@@ -35,9 +36,8 @@ class MoveRecordingsDialog(
                     titleId = R.string.move_recordings
                 ) {
                     dialog = it
-                    dialog.setOnDismissListener { callback() }
+                    dialog.setOnDismissListener { finishOnce() }
                     dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
-                        callback()
                         dialog.dismiss()
                     }
 
@@ -70,10 +70,19 @@ class MoveRecordingsDialog(
                 destinationParent = newFolder
             ) {
                 activity.runOnUiThread {
-                    callback()
+                    finishOnce()
                     dialog.dismiss()
                 }
             }
         }
+    }
+
+    private fun finishOnce() {
+        if (didFinish) {
+            return
+        }
+
+        didFinish = true
+        callback()
     }
 }

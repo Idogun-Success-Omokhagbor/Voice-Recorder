@@ -6,25 +6,17 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ClipData
-import android.content.ActivityNotFoundException
+import android.content.ContentResolver
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.media.MediaScannerConnection
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
-import android.os.Process
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
-import androidx.core.net.toUri
 import androidx.core.content.FileProvider
-import org.fossify.commons.extensions.createDocumentUriUsingFirstParentTreeUri
 import org.fossify.commons.extensions.createSAFFileSdk30
 import org.fossify.commons.extensions.getDocumentFile
 import org.fossify.commons.extensions.getFilenameFromPath
@@ -40,11 +32,13 @@ import org.fossify.voicerecorder.BuildConfig
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.activities.SplashActivity
 import org.fossify.voicerecorder.extensions.config
+import org.fossify.voicerecorder.extensions.createMediaStoreRecordingUri
 import org.fossify.voicerecorder.extensions.createDocumentFile
+import org.fossify.voicerecorder.extensions.finishPendingMediaStoreRecording
 import org.fossify.voicerecorder.extensions.getFormattedFilename
+import org.fossify.voicerecorder.extensions.shouldUseMediaStoreRecordings
 import org.fossify.voicerecorder.extensions.updateWidgets
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
-import org.fossify.voicerecorder.helpers.EXTENSION_MP3
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDER_RUNNING_NOTIF_ID
@@ -53,9 +47,11 @@ import org.fossify.voicerecorder.helpers.RECORDING_RUNNING
 import org.fossify.voicerecorder.helpers.RECORDING_STOPPED
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.helpers.TOGGLE_PAUSE
+import org.fossify.voicerecorder.helpers.email.BackendEmailSender
+import org.fossify.voicerecorder.helpers.email.EmailSendRequest
+import org.fossify.voicerecorder.helpers.email.EmailSender
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.recorder.MediaRecorderWrapper
-import org.fossify.voicerecorder.recorder.Mp3Recorder
 import org.fossify.voicerecorder.recorder.Recorder
 import org.greenrobot.eventbus.EventBus
 import java.io.File
@@ -64,26 +60,31 @@ import java.util.Date
 import java.util.Locale
 import java.util.Timer
 import java.util.TimerTask
-import kotlin.system.exitProcess
 
 class RecorderService : Service() {
     companion object {
         var isRunning = false
+        var currentStatus = RECORDING_STOPPED
 
         private const val AMPLITUDE_UPDATE_MS = 75L
-        private const val EXIT_AFTER_EMAIL_DELAY_MS = 700L
+        private const val VIBRATION_DURATION_MS = 150L
     }
 
 
     private var recordingPath = ""
     private var resultUri: Uri? = null
+    private var recordingFileName = ""
+    private var recordingMimeType = ""
+    private var isMediaStoreRecording = false
 
     private var duration = 0
     private var status = RECORDING_STOPPED
     private var shouldEmailRecording = false
+    private var isFinalizingRecording = false
     private var durationTimer = Timer()
     private var amplitudeTimer = Timer()
     private var recorder: Recorder? = null
+    private val emailSender: EmailSender by lazy { BackendEmailSender(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -96,7 +97,7 @@ class RecorderService : Service() {
             TOGGLE_PAUSE -> togglePause()
             CANCEL_RECORDING -> cancelRecording()
             EMAIL_RECORDING -> {
-                if (status == RECORDING_STOPPED) {
+                if (status == RECORDING_STOPPED || isFinalizingRecording) {
                     stopSelf()
                 } else {
                     shouldEmailRecording = true
@@ -113,18 +114,21 @@ class RecorderService : Service() {
         super.onDestroy()
         stopRecording()
         isRunning = false
+        currentStatus = RECORDING_STOPPED
         updateWidgets(false)
     }
 
-    // mp4 output format with aac encoding should produce good enough m4a files according to https://stackoverflow.com/a/33054794/1967672
+    // MP4 output with AAC produces valid M4A recordings.
+    @Suppress("CyclomaticComplexMethod")
     @SuppressLint("DiscouragedApi")
     private fun startRecording() {
         shouldEmailRecording = false
-        isRunning = true
-        updateWidgets(true)
-        if (status == RECORDING_RUNNING) {
+        if (status != RECORDING_STOPPED || isFinalizingRecording || recorder != null) {
             return
         }
+
+        isRunning = true
+        updateWidgets(true)
 
         val defaultFolder = File(config.saveRecordingsFolder)
         if (!defaultFolder.exists()) {
@@ -132,21 +136,30 @@ class RecorderService : Service() {
         }
 
         val recordingFolder = defaultFolder.absolutePath
-        recordingPath = "$recordingFolder/${getFormattedFilename()}.${config.getExtension()}"
+        recordingFileName = "${getFormattedFilename()}.${config.getExtension()}"
+        recordingPath = "$recordingFolder/$recordingFileName"
+        recordingMimeType = recordingPath.getMimeType()
         resultUri = null
+        isMediaStoreRecording = false
 
         try {
-            recorder = if (recordMp3()) {
-                Mp3Recorder(this)
-            } else {
-                MediaRecorderWrapper(this)
-            }
+            recorder = MediaRecorderWrapper(this)
 
-            if (isRPlus()) {
+            if (shouldUseMediaStoreRecordings()) {
+                val fileUri = createMediaStoreRecordingUri(recordingFileName, recordingMimeType)
+                    ?: error("Failed to create MediaStore recording")
+                resultUri = fileUri
+                recordingPath = fileUri.toString()
+                isMediaStoreRecording = true
+                contentResolver.openFileDescriptor(fileUri, "w")!!
+                    .use { recorder?.setOutputFile(it) }
+            } else if (isRPlus()) {
                 val fileUri = createDocumentFile(recordingPath)
-                    ?: createDocumentUriUsingFirstParentTreeUri(recordingPath).also {
+                    ?: run {
                         createSAFFileSdk30(recordingPath)
+                        createDocumentFile(recordingPath)
                     }
+                    ?: error("Failed to create recording file")
                 resultUri = fileUri
                 contentResolver.openFileDescriptor(fileUri, "w")!!
                     .use { recorder?.setOutputFile(it) }
@@ -167,7 +180,7 @@ class RecorderService : Service() {
             recorder?.prepare()
             recorder?.start()
             duration = 0
-            status = RECORDING_RUNNING
+            setStatus(RECORDING_RUNNING)
             broadcastRecorderInfo()
             startForeground(RECORDER_RUNNING_NOTIF_ID, showNotification())
 
@@ -177,47 +190,70 @@ class RecorderService : Service() {
             startAmplitudeUpdates()
         } catch (e: Exception) {
             showErrorToast(e)
+            deleteCurrentRecordingOutput()
             stopRecording()
         }
     }
 
     private fun stopRecording() {
+        if (isFinalizingRecording) {
+            return
+        }
+
         durationTimer.cancel()
         amplitudeTimer.cancel()
-        status = RECORDING_STOPPED
+        setStatus(RECORDING_STOPPED)
+        stopForeground(STOP_FOREGROUND_REMOVE)
 
         val shouldEmail = shouldEmailRecording
         shouldEmailRecording = false
+        val activeRecorder = recorder ?: return
+        recorder = null
+        isFinalizingRecording = true
 
-        recorder?.apply {
+        var stoppedSuccessfully = false
+        try {
+            activeRecorder.stop()
+            stoppedSuccessfully = true
+        } catch (
+            @Suppress(
+                "TooGenericExceptionCaught",
+                "SwallowedException"
+            ) e: RuntimeException
+        ) {
+            toast(R.string.recording_too_short)
+        } catch (e: Exception) {
+            showErrorToast(e)
+        } finally {
             try {
-                stop()
-                release()
-            } catch (
-                @Suppress(
-                    "TooGenericExceptionCaught",
-                    "SwallowedException"
-                ) e: RuntimeException
-            ) {
-                toast(R.string.recording_too_short)
-            } catch (e: Exception) {
-                showErrorToast(e)
-                e.printStackTrace()
-            }
-
-            ensureBackgroundThread {
-                scanRecording(shouldEmail)
-                EventBus.getDefault().post(Events.RecordingCompleted())
+                activeRecorder.release()
+            } catch (_: Exception) {
             }
         }
-        recorder = null
+
+        ensureBackgroundThread {
+            try {
+                if (stoppedSuccessfully && isCurrentRecordingReadable()) {
+                    finalizeRecording(shouldEmail)
+                } else {
+                    deleteCurrentRecordingOutput()
+                    EventBus.getDefault().post(Events.RecordingCompleted())
+                }
+            } finally {
+                isFinalizingRecording = false
+                if (!stoppedSuccessfully) {
+                    stopSelf()
+                }
+            }
+        }
     }
 
     private fun cancelRecording() {
         shouldEmailRecording = false
         durationTimer.cancel()
         amplitudeTimer.cancel()
-        status = RECORDING_STOPPED
+        setStatus(RECORDING_STOPPED)
+        stopForeground(STOP_FOREGROUND_REMOVE)
 
         recorder?.apply {
             try {
@@ -228,12 +264,7 @@ class RecorderService : Service() {
         }
 
         recorder = null
-        if (isRPlus()) {
-            val recordingUri = createDocumentUriUsingFirstParentTreeUri(recordingPath)
-            DocumentsContract.deleteDocument(contentResolver, recordingUri)
-        } else {
-            File(recordingPath).delete()
-        }
+        deleteCurrentRecordingOutput()
 
         EventBus.getDefault().post(Events.RecordingCompleted())
         stopSelf()
@@ -257,10 +288,10 @@ class RecorderService : Service() {
         try {
             if (status == RECORDING_RUNNING) {
                 recorder?.pause()
-                status = RECORDING_PAUSED
+                setStatus(RECORDING_PAUSED)
             } else if (status == RECORDING_PAUSED) {
                 recorder?.resume()
-                status = RECORDING_RUNNING
+                setStatus(RECORDING_RUNNING)
             }
             broadcastStatus()
             startForeground(RECORDER_RUNNING_NOTIF_ID, showNotification())
@@ -269,155 +300,89 @@ class RecorderService : Service() {
         }
     }
 
+    private fun finalizeRecording(shouldEmail: Boolean) {
+        if (isMediaStoreRecording) {
+            val savedUri = resultUri ?: run {
+                stopSelf()
+                return
+            }
+            finishPendingMediaStoreRecording(savedUri)
+            recordingSavedSuccessfully(savedUri, shouldEmail, shouldExit = !shouldEmail)
+            EventBus.getDefault().post(Events.RecordingCompleted())
+            if (shouldEmail) {
+                sendRecordingByEmail(savedUri)
+            } else {
+                stopSelf()
+            }
+            return
+        }
+
+        scanRecording(shouldEmail)
+    }
+
     private fun scanRecording(shouldEmail: Boolean = false) {
         MediaScannerConnection.scanFile(
             this,
             arrayOf(recordingPath),
-            arrayOf(recordingPath.getMimeType())
+            arrayOf(recordingMimeType.ifBlank { recordingPath.getMimeType() })
         ) { _, uri ->
-            if (uri == null) {
+            val finalRecordingUri = resultUri ?: uri
+            if (finalRecordingUri == null) {
                 toast(org.fossify.commons.R.string.unknown_error_occurred)
-                if (shouldEmail) {
-                    stopSelf()
-                }
+                stopSelf()
                 return@scanFile
             }
 
-            val finalRecordingUri = resultUri ?: uri
-            recordingSavedSuccessfully(finalRecordingUri, shouldEmail)
+            recordingSavedSuccessfully(finalRecordingUri, shouldEmail, shouldExit = !shouldEmail)
+            EventBus.getDefault().post(Events.RecordingCompleted())
 
             if (shouldEmail) {
                 sendRecordingByEmail(finalRecordingUri)
+            } else {
+                stopSelf()
             }
         }
     }
 
-    private fun recordingSavedSuccessfully(savedUri: Uri, isEmail: Boolean) {
+    private fun recordingSavedSuccessfully(savedUri: Uri, isEmail: Boolean, shouldExit: Boolean) {
         if (!isEmail) {
             toast(R.string.recording_saved_successfully)
         }
-        EventBus.getDefault().post(Events.RecordingSaved(savedUri, isEmail))
+        EventBus.getDefault().post(Events.RecordingSaved(savedUri, isEmail, shouldExit))
     }
 
     private fun sendRecordingByEmail(recordingUri: Uri) {
-        val email = config.recordingEmailAddress
-        val subject = getRecordingEmailSubject()
-
-        val emailPackages = getEmailPackages()
-        if (emailPackages.isEmpty()) {
-            vibrateDevice()
-            stopSelf()
-            exitAppProcess(EXIT_AFTER_EMAIL_DELAY_MS)
-            return
-        }
-
-        emailPackages.forEach {
-            grantUriPermission(it, recordingUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        val defaultEmailPackage = getDefaultEmailPackage(emailPackages)
-        val emailIntent = if (defaultEmailPackage != null || emailPackages.size == 1) {
-            buildEmailIntent(
-                recordingUri = recordingUri,
+        val timestamp = getRecordingEmailTimestamp()
+        val subject = getString(R.string.recording_email_subject, timestamp)
+        val result = emailSender.send(
+            EmailSendRequest(
+                recipient = config.recordingEmailAddress,
                 subject = subject,
-                recipient = email,
-                emailPackage = defaultEmailPackage ?: emailPackages.first()
+                recordingUri = recordingUri,
+                fileName = recordingFileName,
+                mimeType = recordingMimeType.ifBlank { recordingPath.getMimeType() },
+                timestamp = timestamp
             )
+        )
+
+        if (result.success) {
+            vibrateDevice()
+            EventBus.getDefault().post(Events.RecordingSaved(recordingUri, isEmail = true, shouldExit = true))
         } else {
-            buildEmailChooserIntent(recordingUri, subject, email, emailPackages)
-        }
-
-        try {
-            startActivity(emailIntent)
-            vibrateDevice()
-            stopSelf()
-            exitAppProcess(EXIT_AFTER_EMAIL_DELAY_MS)
-        } catch (e: ActivityNotFoundException) {
-            vibrateDevice()
-            stopSelf()
-            exitAppProcess(EXIT_AFTER_EMAIL_DELAY_MS)
-        } catch (e: Exception) {
-            vibrateDevice()
-            stopSelf()
-            exitAppProcess(EXIT_AFTER_EMAIL_DELAY_MS)
-        }
-    }
-
-    private fun getRecordingEmailSubject(): String {
-        val dateTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        return getString(R.string.recording_email_subject, dateTime)
-    }
-
-    private fun buildEmailChooserIntent(
-        recordingUri: Uri,
-        subject: String,
-        recipient: String,
-        emailPackages: List<String>
-    ): Intent {
-        val targetedIntents = emailPackages.map {
-            buildEmailIntent(
-                recordingUri = recordingUri,
-                subject = subject,
-                recipient = recipient,
-                emailPackage = it
+            EventBus.getDefault().post(
+                Events.RecordingSaved(
+                    uri = recordingUri,
+                    isEmail = true,
+                    shouldExit = false,
+                    errorMessage = result.message
+                )
             )
         }
-
-        return Intent.createChooser(
-            targetedIntents.first(),
-            getString(R.string.choose_email_app)
-        ).apply {
-            putExtra(Intent.EXTRA_INITIAL_INTENTS, targetedIntents.drop(1).toTypedArray())
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        stopSelf()
     }
 
-    private fun buildEmailIntent(
-        recordingUri: Uri,
-        subject: String,
-        recipient: String,
-        emailPackage: String
-    ) = Intent(Intent.ACTION_SEND).apply {
-        type = "message/rfc822"
-        setPackage(emailPackage)
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_STREAM, recordingUri)
-        clipData = ClipData.newUri(contentResolver, subject, recordingUri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (recipient.isNotBlank()) {
-            putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
-        }
-    }
-
-    private fun getDefaultEmailPackage(emailPackages: List<String>): String? {
-        val packageName = packageManager.resolveActivity(
-            getEmailResolverIntent(),
-            PackageManager.MATCH_DEFAULT_ONLY
-        )?.activityInfo?.packageName
-
-        return packageName?.takeIf {
-            it in emailPackages && !it.isResolverPackage()
-        }
-    }
-
-    private fun getEmailPackages(): List<String> {
-        return packageManager.queryIntentActivities(getEmailResolverIntent(), 0)
-            .mapNotNull { it.activityInfo?.packageName }
-            .filterNot { it.isResolverPackage() }
-            .distinct()
-    }
-
-    private fun getEmailResolverIntent() = Intent(Intent.ACTION_SENDTO).setData("mailto:".toUri())
-
-    private fun String.isResolverPackage() =
-        this == "android" || contains("resolver", ignoreCase = true)
-
-    private fun exitAppProcess(delayMs: Long) {
-        Handler(Looper.getMainLooper()).postDelayed({
-            Process.killProcess(Process.myPid())
-            exitProcess(0)
-        }, delayMs)
+    private fun getRecordingEmailTimestamp(): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
     }
 
     private fun vibrateDevice() {
@@ -425,11 +390,11 @@ class RecorderService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                 vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE)
+                    VibrationEffect.createOneShot(VIBRATION_DURATION_MS, VibrationEffect.DEFAULT_AMPLITUDE)
                 )
             } else {
                 @Suppress("DEPRECATION")
-                (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.vibrate(150)
+                (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.vibrate(VIBRATION_DURATION_MS)
             }
         } catch (_: SecurityException) {
         }
@@ -506,7 +471,48 @@ class RecorderService : Service() {
         EventBus.getDefault().post(Events.RecordingStatus(status))
     }
 
-    private fun recordMp3(): Boolean {
-        return config.extension == EXTENSION_MP3
+    private fun setStatus(newStatus: Int) {
+        status = newStatus
+        currentStatus = newStatus
+        isRunning = newStatus != RECORDING_STOPPED
+        updateWidgets(isRunning)
+    }
+
+    private fun isCurrentRecordingReadable(): Boolean {
+        val uri = resultUri
+        return if (uri != null) {
+            isUriReadable(uri)
+        } else {
+            File(recordingPath).length() > 0L
+        }
+    }
+
+    private fun isUriReadable(uri: Uri): Boolean {
+        return try {
+            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                if (descriptor.statSize > 0L) {
+                    return true
+                }
+            }
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.read() >= 0
+            } ?: false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun deleteCurrentRecordingOutput() {
+        try {
+            val uri = resultUri
+            if (!isMediaStoreRecording && !isRPlus() && recordingPath.isNotBlank()) {
+                File(recordingPath).delete()
+            } else if (uri != null && uri.scheme == ContentResolver.SCHEME_CONTENT) {
+                contentResolver.delete(uri, null, null)
+            } else if (recordingPath.isNotBlank()) {
+                File(recordingPath).delete()
+            }
+        } catch (_: Exception) {
+        }
     }
 }

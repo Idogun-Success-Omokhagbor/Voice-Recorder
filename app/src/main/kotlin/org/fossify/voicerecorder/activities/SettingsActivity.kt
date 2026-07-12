@@ -37,7 +37,6 @@ import org.fossify.voicerecorder.helpers.DEFAULT_BITRATE
 import org.fossify.voicerecorder.helpers.DEFAULT_SAMPLING_RATE
 import org.fossify.voicerecorder.helpers.EXTENSION_M4A
 import org.fossify.voicerecorder.helpers.EXTENSION_OGG
-import org.fossify.voicerecorder.helpers.EXTENSION_MP3
 import org.fossify.voicerecorder.helpers.SAMPLING_RATES
 import org.fossify.voicerecorder.helpers.SAMPLING_RATE_BITRATE_LIMITS
 import org.fossify.voicerecorder.models.Events
@@ -181,10 +180,6 @@ class SettingsActivity : SimpleActivity() {
     }
 
     private fun setupExtension() {
-        if (config.extension == EXTENSION_MP3) {
-            config.extension = EXTENSION_M4A
-        }
-
         binding.settingsExtension.text = config.getExtensionText()
         binding.settingsExtensionHolder.setOnClickListener {
             val items = arrayListOf(

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_launcher_name">Voice Recorder Plus</string>
-    <string name="confirm_recording_folder">You must confirm the folder where you want to save your recordings. Please press "OK" to continue.</string>
+    <string name="confirm_recording_folder">Voice Recorder Plus will create and use the Voice Recorder Plus folder for recordings. Tap OK to continue with the required permissions.</string>
     <string name="move_recordings">Move recordings</string>
     <string name="move_recordings_to_new_folder_desc">You have existing recordings. Do you want to move them to your new folder?</string>
     <string name="recording_saved_successfully">Recording saved successfully</string>
@@ -36,8 +36,18 @@
     <string name="sample_rate">Sample rate</string>
     <string name="recording_email_address">Recording email address</string>
     <string name="recording_email_subject">Recording - %1$s</string>
-    <string name="choose_email_app">Choose email app</string>
-    <string name="about_version">Version 1.05</string>
+    <string name="invalid_email_address">Enter a valid email address</string>
+    <string name="email_backend_not_configured">Silent email sending is not configured. Set VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL and rebuild.</string>
+    <string name="email_backend_requires_https">Silent email sending requires an HTTPS backend URL.</string>
+    <string name="email_backend_timeout">The email server timed out. The recording was saved locally.</string>
+    <string name="email_backend_network_error">The email server could not be reached. The recording was saved locally.</string>
+    <string name="email_backend_auth_failed">The email server rejected the request. Check backend authentication.</string>
+    <string name="email_backend_invalid_recipient">The email address was rejected by the email server.</string>
+    <string name="email_backend_server_error">The email server returned an error. The recording was saved locally.</string>
+    <string name="email_backend_invalid_response">The email server did not confirm that the recording was sent.</string>
+    <string name="email_backend_failed">The recording was saved, but the email could not be sent.</string>
+    <string name="email_sent_successfully">Recording emailed successfully</string>
+    <string name="about_version">Version %1$s</string>
     <string name="about_fork_text">This app is a fork of Fossify\'s Voice Recorder</string>
     <string name="open_source_code">Open source code</string>
     <string name="no_browser_found">No browser found</string>

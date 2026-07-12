@@ -60,7 +60,7 @@ class RecorderFragment(
 
     override fun onResume() {
         setupColors()
-        if (!RecorderService.isRunning) {
+        if (RecorderService.currentStatus == RECORDING_STOPPED) {
             status = RECORDING_STOPPED
         }
 
@@ -68,8 +68,9 @@ class RecorderFragment(
     }
 
     override fun onDestroy() {
-        bus?.unregister(this)
+        bus?.takeIf { it.isRegistered(this) }?.unregister(this)
         pauseBlinkTimer.cancel()
+        context.getActivity().setKeepScreenAwake(false)
     }
 
     override fun onAttachedToWindow() {
@@ -77,7 +78,9 @@ class RecorderFragment(
         setupColors()
         binding.recorderVisualizer.recreate()
         bus = EventBus.getDefault()
-        bus!!.register(this)
+        if (bus?.isRegistered(this) == false) {
+            bus!!.register(this)
+        }
 
         updateRecordingDuration(0)
         binding.toggleRecordingButton.setDebouncedClickListener {
@@ -125,6 +128,7 @@ class RecorderFragment(
 
         binding.cancelRecordingButton.applyColorFilter(properTextColor)
         binding.saveRecordingButton.applyColorFilter(properTextColor)
+        binding.recordingEmailButton.applyColorFilter(properTextColor)
         binding.recorderVisualizer.chunkColor = properPrimaryColor
         binding.recordingDuration.setTextColor(properTextColor)
     }
@@ -269,6 +273,7 @@ class RecorderFragment(
             }
 
             else -> {
+                context.getActivity().setKeepScreenAwake(false)
                 binding.toggleRecordingButton.alpha = 1f
                 binding.recorderVisualizer.recreate()
                 binding.recordingDuration.text = null

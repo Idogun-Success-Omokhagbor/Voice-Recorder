@@ -45,6 +45,7 @@
         android:focusable="true"
         android:padding="@dimen/recording_email_button_padding"
         android:src="@drawable/ic_mail_vector"
+        android:visibility="gone"
         app:layout_constraintBottom_toTopOf="@id/toggle_recording_button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />

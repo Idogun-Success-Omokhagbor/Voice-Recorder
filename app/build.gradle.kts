@@ -22,6 +22,13 @@ fun hasSigningVars(): Boolean {
             && providers.environmentVariable("SIGNING_STORE_PASSWORD").orNull != null
 }
 
+val emailBackendUrl = providers.gradleProperty("VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL")
+    .orElse(providers.environmentVariable("VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL"))
+    .orElse("")
+    .get()
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 base {
     val versionCode = project.property("VERSION_CODE").toString().toInt()
     archivesName = "voicerecorder-$versionCode"
@@ -37,6 +44,7 @@ android {
         versionName = project.property("VERSION_NAME").toString()
         versionCode = project.property("VERSION_CODE").toString().toInt()
         vectorDrawables.useSupportLibrary = true
+        buildConfigField("String", "EMAIL_BACKEND_URL", "\"$emailBackendUrl\"")
     }
 
     signingConfigs {
@@ -144,7 +152,6 @@ dependencies {
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.constraintlayout)
-    implementation(libs.tandroidlame)
     implementation(libs.autofittextview)
     detektPlugins(libs.compose.detekt)
 }

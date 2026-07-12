@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="org.fossify.voicerecorder_preferences.xml" />
+        <exclude domain="sharedpref" path="org.fossify.voicerecorder.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="org.fossify.voicerecorder_preferences.xml" />
+        <exclude domain="sharedpref" path="org.fossify.voicerecorder.xml" />
+    </device-transfer>
+</data-extraction-rules>

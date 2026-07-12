@@ -89,7 +89,7 @@ class PlayerFragment(
         player?.release()
         player = null
 
-        bus?.unregister(this)
+        bus?.takeIf { it.isRegistered(this) }?.unregister(this)
         progressTimer.cancel()
     }
 
@@ -97,7 +97,9 @@ class PlayerFragment(
         super.onAttachedToWindow()
 
         bus = EventBus.getDefault()
-        bus!!.register(this)
+        if (bus?.isRegistered(this) == false) {
+            bus!!.register(this)
+        }
         setupColors()
         loadRecordings()
         initMediaPlayer()

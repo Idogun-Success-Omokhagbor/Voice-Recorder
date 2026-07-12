@@ -3,6 +3,7 @@ package org.fossify.voicerecorder.activities
 import android.content.Intent
 import org.fossify.commons.dialogs.PermissionRequiredDialog
 import org.fossify.commons.extensions.openNotificationSettings
+import org.fossify.voicerecorder.helpers.RECORDING_STOPPED
 import org.fossify.voicerecorder.services.RecorderService
 
 class BackgroundRecordActivity : SimpleActivity() {
@@ -17,7 +18,7 @@ class BackgroundRecordActivity : SimpleActivity() {
                 if (granted) {
                     Intent(this@BackgroundRecordActivity, RecorderService::class.java).apply {
                         try {
-                            if (RecorderService.isRunning) {
+                            if (RecorderService.currentStatus != RECORDING_STOPPED) {
                                 stopService(this)
                             } else {
                                 startService(this)

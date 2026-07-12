@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.Process
 import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
@@ -22,31 +21,32 @@ import org.fossify.commons.extensions.toast
 import org.fossify.commons.extensions.updateBottomTabItemColors
 import org.fossify.commons.helpers.PERMISSION_RECORD_AUDIO
 import org.fossify.commons.helpers.PERMISSION_WRITE_STORAGE
-import org.fossify.commons.helpers.isRPlus
+import org.fossify.commons.helpers.isQPlus
 import org.fossify.voicerecorder.BuildConfig
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.adapters.ViewPagerAdapter
 import org.fossify.voicerecorder.databinding.ActivityMainBinding
 import org.fossify.voicerecorder.dialogs.AboutDialog
+import org.fossify.voicerecorder.dialogs.StoragePermissionDialog
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
-import org.fossify.voicerecorder.extensions.ensureStoragePermission
+import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
+import org.fossify.voicerecorder.helpers.RECORDING_STOPPED
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
-import kotlin.system.exitProcess
 
 class MainActivity : SimpleActivity() {
     companion object {
         private const val EXIT_AFTER_SAVE_DELAY_MS = 500L
-        private const val EXIT_AFTER_EMAIL_SAVE_DELAY_MS = 1500L
     }
 
     private var bus: EventBus? = null
     private var handledRecordAfterLaunch = false
+    private var launchedSettings = false
 
     override var isSearchBarEnabled = true
 
@@ -89,6 +89,7 @@ class MainActivity : SimpleActivity() {
         }
         setupTabColors()
         getPagerAdapter()?.onResume()
+        startRecordingAfterSettingsReturnIfNeeded()
     }
 
     override fun onPause() {
@@ -161,22 +162,28 @@ class MainActivity : SimpleActivity() {
     }
 
     private fun tryInitVoiceRecorder() {
-        if (isRPlus()) {
-            val shouldConfirmFolder = shouldConfirmRecordingFolderOnLaunch()
-            ensureStoragePermission(
-                forceDefaultFolderConfirmation = shouldConfirmFolder
-            ) { granted ->
-                if (granted) {
-                    if (shouldConfirmFolder) {
-                        config.defaultRecordingFolderConfirmed = true
-                        config.openedSettingsOnFirstUse = false
-                    }
-                    handleAudioPermissionAndSetup()
-                } else {
+        if (shouldConfirmRecordingFolderOnLaunch()) {
+            StoragePermissionDialog(this) { granted ->
+                if (!granted) {
                     toast(org.fossify.commons.R.string.no_storage_permissions)
                     finish()
+                    return@StoragePermissionDialog
                 }
+
+                config.defaultRecordingFolderConfirmed = true
+                config.openedSettingsOnFirstUse = false
+                ensureDefaultRecordingsFolderExists()
+                handleStorageAndAudioPermissionAndSetup()
             }
+        } else {
+            ensureDefaultRecordingsFolderExists()
+            handleStorageAndAudioPermissionAndSetup()
+        }
+    }
+
+    private fun handleStorageAndAudioPermissionAndSetup() {
+        if (isQPlus()) {
+            handleAudioPermissionAndSetup()
         } else {
             handlePermission(PERMISSION_WRITE_STORAGE) {
                 if (it) {
@@ -274,7 +281,22 @@ class MainActivity : SimpleActivity() {
         }
 
         handledRecordAfterLaunch = true
-        if (config.recordAfterLaunch && !RecorderService.isRunning) {
+        startRecordingIfConfigured()
+    }
+
+    private fun startRecordingAfterSettingsReturnIfNeeded() {
+        if (!launchedSettings) {
+            return
+        }
+
+        launchedSettings = false
+        binding.viewPager.currentItem = 0
+        binding.mainTabsHolder.getTabAt(0)?.select()
+        startRecordingIfConfigured()
+    }
+
+    private fun startRecordingIfConfigured() {
+        if (config.recordAfterLaunch && RecorderService.currentStatus == RECORDING_STOPPED) {
             Intent(this@MainActivity, RecorderService::class.java).apply {
                 try {
                     startService(this)
@@ -321,6 +343,7 @@ class MainActivity : SimpleActivity() {
 
     private fun launchSettings() {
         hideKeyboard()
+        launchedSettings = true
         startActivity(Intent(applicationContext, SettingsActivity::class.java))
     }
 
@@ -333,6 +356,14 @@ class MainActivity : SimpleActivity() {
     @Suppress("unused")
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun recordingSaved(event: Events.RecordingSaved) {
+        if (!event.errorMessage.isNullOrBlank()) {
+            toast(event.errorMessage)
+        }
+
+        if (!event.shouldExit) {
+            return
+        }
+
         if (isThirdPartyIntent()) {
             Intent().apply {
                 data = event.uri!!
@@ -341,16 +372,13 @@ class MainActivity : SimpleActivity() {
             }
             finish()
         } else {
-            val exitDelay = if (event.isEmail) EXIT_AFTER_EMAIL_SAVE_DELAY_MS else EXIT_AFTER_SAVE_DELAY_MS
-            exitAppProcessAfterSave(exitDelay)
+            exitAppAfterSave()
         }
     }
 
-    private fun exitAppProcessAfterSave(delayMs: Long) {
+    private fun exitAppAfterSave() {
         Handler(Looper.getMainLooper()).postDelayed({
             finishAndRemoveTask()
-            Process.killProcess(Process.myPid())
-            exitProcess(0)
-        }, delayMs)
+        }, EXIT_AFTER_SAVE_DELAY_MS)
     }
 }

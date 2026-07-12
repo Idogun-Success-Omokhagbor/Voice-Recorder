@@ -7,11 +7,11 @@ import androidx.core.content.edit
 import org.fossify.commons.helpers.BaseConfig
 import org.fossify.voicerecorder.R
 import org.fossify.voicerecorder.extensions.getDefaultRecordingsFolder
+import org.fossify.voicerecorder.extensions.getPreviousDefaultRecordingFolders
 
 class Config(context: Context) : BaseConfig(context) {
     companion object {
-        private const val PREVIOUS_DEFAULT_RECORDINGS_FOLDER = "Recordings"
-        private const val PREVIOUS_LEGACY_DEFAULT_RECORDINGS_FOLDER = "Fossify Voice Recorder"
+        private const val REMOVED_EXTENSION_MP3 = 1
 
         fun newInstance(context: Context) = Config(context)
     }
@@ -20,11 +20,7 @@ class Config(context: Context) : BaseConfig(context) {
         get() {
             val defaultFolder = context.getDefaultRecordingsFolder()
             val savedFolder = prefs.getString(SAVE_RECORDINGS, defaultFolder)!!
-            val savedFolderName = savedFolder.substringAfterLast("/")
-            return if (
-                savedFolderName == PREVIOUS_DEFAULT_RECORDINGS_FOLDER ||
-                savedFolderName == PREVIOUS_LEGACY_DEFAULT_RECORDINGS_FOLDER
-            ) {
+            return if (savedFolder in context.getPreviousDefaultRecordingFolders()) {
                 prefs.edit { putString(SAVE_RECORDINGS, defaultFolder) }
                 defaultFolder
             } else {
@@ -35,7 +31,15 @@ class Config(context: Context) : BaseConfig(context) {
             .apply()
 
     var extension: Int
-        get() = prefs.getInt(EXTENSION, EXTENSION_M4A)
+        get() {
+            val storedExtension = prefs.getInt(EXTENSION, EXTENSION_M4A)
+            return if (storedExtension == REMOVED_EXTENSION_MP3) {
+                prefs.edit { putInt(EXTENSION, EXTENSION_M4A) }
+                EXTENSION_M4A
+            } else {
+                storedExtension
+            }
+        }
         set(extension) = prefs.edit().putInt(EXTENSION, extension).apply()
 
     var microphoneMode: Int
@@ -82,7 +86,7 @@ class Config(context: Context) : BaseConfig(context) {
         when (extension) {
             EXTENSION_M4A -> R.string.m4a
             EXTENSION_OGG -> R.string.ogg_opus
-            else -> R.string.mp3_experimental
+            else -> R.string.m4a
         }
     )
 
@@ -90,7 +94,7 @@ class Config(context: Context) : BaseConfig(context) {
         when (extension) {
             EXTENSION_M4A -> R.string.m4a
             EXTENSION_OGG -> R.string.ogg
-            else -> R.string.mp3
+            else -> R.string.m4a
         }
     )
 

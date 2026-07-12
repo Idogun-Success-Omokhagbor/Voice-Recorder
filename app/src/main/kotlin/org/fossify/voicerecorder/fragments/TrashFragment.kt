@@ -46,14 +46,16 @@ class TrashFragment(
     }
 
     override fun onDestroy() {
-        bus?.unregister(this)
+        bus?.takeIf { it.isRegistered(this) }?.unregister(this)
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
 
         bus = EventBus.getDefault()
-        bus!!.register(this)
+        if (bus?.isRegistered(this) == false) {
+            bus!!.register(this)
+        }
         setupColors()
         loadRecordings(trashed = true)
         storePrevPath()

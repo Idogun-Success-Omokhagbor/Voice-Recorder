@@ -1,7 +1,10 @@
 package org.fossify.voicerecorder.extensions
 
 import android.app.Activity
+import android.content.ContentResolver
+import android.content.ContentValues
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.view.WindowManager
 import androidx.core.net.toUri
 import org.fossify.commons.activities.BaseSimpleActivity
@@ -16,6 +19,7 @@ import org.fossify.commons.extensions.toFileDirItem
 import org.fossify.commons.helpers.DAY_SECONDS
 import org.fossify.commons.helpers.MONTH_SECONDS
 import org.fossify.commons.helpers.ensureBackgroundThread
+import org.fossify.commons.helpers.isQPlus
 import org.fossify.commons.helpers.isRPlus
 import org.fossify.commons.models.FileDirItem
 import org.fossify.voicerecorder.dialogs.StoragePermissionDialog
@@ -30,10 +34,18 @@ fun Activity.setKeepScreenAwake(keepScreenOn: Boolean) {
     }
 }
 
+@Suppress("CyclomaticComplexMethod")
 fun BaseSimpleActivity.ensureStoragePermission(
     forceDefaultFolderConfirmation: Boolean = false,
     callback: (result: Boolean) -> Unit
 ) {
+    if (isQPlus() && config.saveRecordingsFolder == getDefaultRecordingsFolder()) {
+        ensureDefaultRecordingsFolderExists()
+        config.defaultRecordingFolderConfirmed = true
+        callback(true)
+        return
+    }
+
     if (
         isRPlus() &&
         (forceDefaultFolderConfirmation || !hasProperStoredFirstParentUri(config.saveRecordingsFolder))
@@ -132,21 +144,58 @@ fun BaseSimpleActivity.deleteRecordings(
     callback: (success: Boolean) -> Unit
 ) {
     ensureBackgroundThread {
-        if (isRPlus()) {
-            val resolver = contentResolver
-            recordingsToRemove.forEach {
-                DocumentsContract.deleteDocument(resolver, it.path.toUri())
-            }
-        } else {
-            recordingsToRemove.forEach {
-                val fileDirItem = File(it.path).toFileDirItem(this)
-                deleteFile(fileDirItem)
-            }
+        var success = true
+        recordingsToRemove.forEach {
+            success = deleteRecording(it) && success
         }
 
-        callback(true)
+        callback(success)
     }
 }
+
+private fun BaseSimpleActivity.deleteRecording(recording: Recording): Boolean {
+    return try {
+        if (recording.path.isContentUri()) {
+            contentResolver.delete(recording.path.toUri(), null, null) > 0
+        } else if (isRPlus()) {
+            DocumentsContract.deleteDocument(contentResolver, recording.path.toUri())
+        } else {
+            val fileDirItem = File(recording.path).toFileDirItem(this)
+            deleteFile(fileDirItem)
+            !File(recording.path).exists()
+        }
+    } catch (_: Exception) {
+        false
+    }
+}
+
+private fun String.isContentUri() = startsWith("${ContentResolver.SCHEME_CONTENT}://")
+
+private fun BaseSimpleActivity.updateMediaStoreTrashState(
+    recordings: Collection<Recording>,
+    trashed: Boolean
+): Boolean {
+    if (!isRPlus()) {
+        return false
+    }
+
+    var success = true
+    val values = ContentValues().apply {
+        put(MediaStore.Audio.Media.IS_TRASHED, if (trashed) 1 else 0)
+    }
+    recordings.forEach {
+        val updated = try {
+            contentResolver.update(it.path.toUri(), values, null, null) > 0
+        } catch (_: Exception) {
+            false
+        }
+        success = updated && success
+    }
+    return success
+}
+
+private fun Collection<Recording>.allMediaStoreUris() =
+    isNotEmpty() && all { it.path.isContentUri() }
 
 fun BaseSimpleActivity.trashRecordings(
     recordingsToMove: Collection<Recording>,
@@ -174,6 +223,16 @@ fun BaseSimpleActivity.moveRecordings(
     destinationParent: String,
     callback: (success: Boolean) -> Unit
 ) {
+    if (recordingsToMove.allMediaStoreUris()) {
+        val trashFolder = getOrCreateTrashFolder()
+        val canTrashOrRestore = destinationParent == trashFolder || sourceParent == trashFolder
+        callback(
+            canTrashOrRestore &&
+                updateMediaStoreTrashState(recordingsToMove, trashed = destinationParent == trashFolder)
+        )
+        return
+    }
+
     if (isRPlus()) {
         moveRecordingsSAF(
             recordings = recordingsToMove,
@@ -207,28 +266,44 @@ private fun BaseSimpleActivity.moveRecordingsSAF(
             createSAFDirectorySdk30(destinationParent)
         }
 
+        var success = true
         recordings.forEach { recording ->
-            try {
+            val moved = try {
                 DocumentsContract.moveDocument(
                     contentResolver,
                     recording.path.toUri(),
                     sourceParentDocumentUri,
                     destinationParentDocumentUri
-                )
+                ) != null
             } catch (@Suppress("SwallowedException") e: IllegalStateException) {
-                val sourceUri = recording.path.toUri()
-                contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-                    val targetPath = File(destinationParent, recording.title).absolutePath
-                    val targetUri = createDocumentFile(targetPath) ?: return@forEach
-                    contentResolver.openOutputStream(targetUri)?.use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                    DocumentsContract.deleteDocument(contentResolver, sourceUri)
-                }
+                copyThenDeleteSAFRecording(recording, destinationParent)
+            } catch (_: Exception) {
+                false
             }
+            success = moved && success
         }
 
-        callback(true)
+        callback(success)
+    }
+}
+
+private fun BaseSimpleActivity.copyThenDeleteSAFRecording(
+    recording: Recording,
+    destinationParent: String
+): Boolean {
+    val sourceUri = recording.path.toUri()
+    return try {
+        val targetPath = File(destinationParent, recording.title).absolutePath
+        val targetUri = createDocumentFile(targetPath) ?: return false
+        val copied = contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+            contentResolver.openOutputStream(targetUri)?.use { outputStream ->
+                inputStream.copyTo(outputStream)
+                true
+            }
+        } == true
+        copied && DocumentsContract.deleteDocument(contentResolver, sourceUri)
+    } catch (_: Exception) {
+        false
     }
 }
 
