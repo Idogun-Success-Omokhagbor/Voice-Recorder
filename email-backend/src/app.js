@@ -139,7 +139,7 @@ export function createApp({ config, mailer, rateLimitEnabled = true }) {
         }
         return res.json({ success: true, message: "Email sent" })
       } catch (error) {
-        console.error("Brevo SMTP delivery failed", { code: error?.code || "UNKNOWN" })
+        console.error("Email delivery failed", { code: error?.code || "UNKNOWN" })
         return failure(res, 502, "Email delivery failed")
       }
     }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
-import { createBrevoApiTransport } from "../src/mailer.js"
+import { createBrevoApiTransport, createGoogleAppsScriptTransport } from "../src/mailer.js"
 
 const config = { brevoApiKey: "test-api-key" }
 
@@ -77,6 +77,67 @@ describe("Brevo API transport", () => {
       }),
       (error) => {
         assert.equal(error.code, "BREVO_INVALID_RESPONSE")
+        return true
+      }
+    )
+  })
+})
+
+describe("Google Apps Script transport", () => {
+  const googleConfig = {
+    googleAppsScriptUrl: "https://script.google.com/macros/s/deployment-id/exec",
+    googleAppsScriptSecret: "test-google-apps-script-secret"
+  }
+
+  test("sends a protected base64 attachment", async () => {
+    let request
+    const transport = createGoogleAppsScriptTransport(googleConfig, async (url, options) => {
+      request = { url, options, body: JSON.parse(options.body) }
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    })
+
+    const result = await transport.sendMail({
+      to: "recipient@example.com",
+      subject: "Recording - 2026-07-13 10:20:30",
+      text: "Recording attached.",
+      attachments: [{
+        filename: "recording.m4a",
+        content: Buffer.from("audio-data"),
+        contentType: "audio/mp4"
+      }]
+    })
+
+    assert.deepEqual(result.accepted, ["recipient@example.com"])
+    assert.equal(request.url, googleConfig.googleAppsScriptUrl)
+    assert.equal(request.body.secret, googleConfig.googleAppsScriptSecret)
+    assert.equal(request.body.attachment.content, Buffer.from("audio-data").toString("base64"))
+    assert.equal(request.options.redirect, "follow")
+  })
+
+  test("rejects a negative relay response", async () => {
+    const transport = createGoogleAppsScriptTransport(googleConfig, async () => {
+      return new Response(JSON.stringify({ success: false }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    })
+
+    await assert.rejects(
+      () => transport.sendMail({
+        to: "recipient@example.com",
+        subject: "Recording - 2026-07-13 10:20:30",
+        text: "Recording attached.",
+        attachments: [{
+          filename: "recording.m4a",
+          content: Buffer.from("audio-data"),
+          contentType: "audio/mp4"
+        }]
+      }),
+      (error) => {
+        assert.equal(error.code, "GOOGLE_APPS_SCRIPT_REJECTED")
         return true
       }
     )

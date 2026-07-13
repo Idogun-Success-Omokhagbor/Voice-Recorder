@@ -82,7 +82,7 @@ Connection timeout is 30 seconds and response-read timeout is 90 seconds so a sl
 
 The backend must authenticate and authorize the bearer token server-side, validate the recipient and attachment, rate-limit requests, and return the documented JSON. A token embedded at build time can be extracted from an APK, so it must be scoped, revocable, monitored, and treated as an application credential rather than a private user secret.
 
-The production relay implementation is in [`email-backend`](email-backend). It keeps Brevo credentials server-side, requires a bearer token before parsing uploads, derives the subject from the validated timestamp, and rate-limits requests. The Brevo HTTPS API deployment accepts recordings up to 14 MiB so the base64 attachment remains within Brevo's 20 MB transactional-email limit. [`render.yaml`](render.yaml) defines a free Render web service; the Brevo API key, verified sender address, and backend bearer token remain deployment secrets. SMTP remains available for paid hosts that permit outbound SMTP ports.
+The production relay implementation is in [`email-backend`](email-backend). It keeps provider credentials server-side, requires a bearer token before parsing uploads, derives the subject from the validated timestamp, and rate-limits requests. The production HTTPS route uses an authorized Google Apps Script web app and accepts recordings up to 14 MiB. [`render.yaml`](render.yaml) defines a free Render web service; the Apps Script URL, relay secret, sender address, and backend bearer token remain deployment secrets. Brevo API and SMTP remain available as fallback transports.
 
 ## Local development
 
@@ -110,7 +110,7 @@ Java 17 and Android SDK 36 are required. On Unix-like systems, run:
 
 On Windows PowerShell, use `.\gradlew.bat` with the same task names.
 
-GitHub Actions runs the Brevo backend tests, debug build, lint, Detekt, and JVM tests on every push and pull request and uploads the debug APK when all checks pass.
+GitHub Actions runs the email backend tests, debug build, lint, Detekt, and JVM tests on every push and pull request and uploads the debug APK when all checks pass.
 
 ## Runtime limitation
 

@@ -9,10 +9,12 @@ services:
     healthCheckPath: /health
     envVars:
       - key: EMAIL_TRANSPORT
-        value: api
+        value: google_apps_script
       - key: SMTP_FROM_NAME
         value: Voice Recorder Plus
-      - key: BREVO_API_KEY
+      - key: GOOGLE_APPS_SCRIPT_URL
+        sync: false
+      - key: GOOGLE_APPS_SCRIPT_SECRET
         sync: false
       - key: SMTP_FROM_EMAIL
         sync: false

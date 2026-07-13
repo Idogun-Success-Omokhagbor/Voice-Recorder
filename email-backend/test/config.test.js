@@ -63,4 +63,32 @@ describe("email backend configuration", () => {
       /BREVO_API_KEY/
     )
   })
+
+  test("loads a protected Google Apps Script transport", () => {
+    const config = loadConfig({
+      BACKEND_BEARER_TOKEN: validEnvironment.BACKEND_BEARER_TOKEN,
+      SMTP_FROM_EMAIL: validEnvironment.SMTP_FROM_EMAIL,
+      EMAIL_TRANSPORT: "google_apps_script",
+      GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/deployment-id/exec",
+      GOOGLE_APPS_SCRIPT_SECRET: "google-script-secret-that-is-long-enough"
+    })
+
+    assert.equal(config.emailTransport, "google_apps_script")
+    assert.equal(config.googleAppsScriptUrl, "https://script.google.com/macros/s/deployment-id/exec")
+    assert.equal(config.smtpUser, null)
+    assert.equal(config.smtpPass, null)
+  })
+
+  test("rejects an untrusted Google Apps Script URL", () => {
+    assert.throws(
+      () => loadConfig({
+        BACKEND_BEARER_TOKEN: validEnvironment.BACKEND_BEARER_TOKEN,
+        SMTP_FROM_EMAIL: validEnvironment.SMTP_FROM_EMAIL,
+        EMAIL_TRANSPORT: "google_apps_script",
+        GOOGLE_APPS_SCRIPT_URL: "https://example.com/relay",
+        GOOGLE_APPS_SCRIPT_SECRET: "google-script-secret-that-is-long-enough"
+      }),
+      /script.google.com/
+    )
+  })
 })

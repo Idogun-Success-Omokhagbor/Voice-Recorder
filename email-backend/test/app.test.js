@@ -137,7 +137,7 @@ describe("Voice Recorder Plus email backend", () => {
     assert.deepEqual(response.body, { success: false, message: "Recording is too large" })
   })
 
-  test("returns failure when Brevo does not accept the recipient", async () => {
+  test("returns failure when the provider does not accept the recipient", async () => {
     const response = await validRequest(testApp(async () => ({
       accepted: [],
       rejected: ["recipient@example.com"]

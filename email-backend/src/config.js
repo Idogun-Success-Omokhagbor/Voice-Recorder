@@ -1,6 +1,6 @@
 import validator from "validator"
 
-const SUPPORTED_TRANSPORTS = new Set(["api", "smtp"])
+const SUPPORTED_TRANSPORTS = new Set(["api", "google_apps_script", "smtp"])
 
 function requiredValue(env, key) {
   const value = env[key]?.trim()
@@ -28,7 +28,24 @@ export function loadConfig(env = process.env) {
   const smtpSecure = env.SMTP_SECURE?.toLowerCase() === "true" || smtpPort === 465
   const emailTransport = env.EMAIL_TRANSPORT?.trim().toLowerCase() || "smtp"
   if (!SUPPORTED_TRANSPORTS.has(emailTransport)) {
-    throw new Error("EMAIL_TRANSPORT must be api or smtp")
+    throw new Error("EMAIL_TRANSPORT must be api, google_apps_script, or smtp")
+  }
+
+  const googleAppsScriptUrl = emailTransport === "google_apps_script"
+    ? requiredValue(env, "GOOGLE_APPS_SCRIPT_URL")
+    : null
+  if (googleAppsScriptUrl) {
+    const parsedUrl = new URL(googleAppsScriptUrl)
+    if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "script.google.com") {
+      throw new Error("GOOGLE_APPS_SCRIPT_URL must be an HTTPS script.google.com URL")
+    }
+  }
+
+  const googleAppsScriptSecret = emailTransport === "google_apps_script"
+    ? requiredValue(env, "GOOGLE_APPS_SCRIPT_SECRET")
+    : null
+  if (googleAppsScriptSecret && (googleAppsScriptSecret.length < 32 || /\s/.test(googleAppsScriptSecret))) {
+    throw new Error("GOOGLE_APPS_SCRIPT_SECRET must be at least 32 characters without whitespace")
   }
 
   const smtpFromEmail = requiredValue(env, "SMTP_FROM_EMAIL")
@@ -41,6 +58,8 @@ export function loadConfig(env = process.env) {
     backendToken,
     emailTransport,
     brevoApiKey: emailTransport === "api" ? requiredValue(env, "BREVO_API_KEY") : null,
+    googleAppsScriptUrl,
+    googleAppsScriptSecret,
     smtpHost: env.SMTP_HOST?.trim() || "smtp-relay.brevo.com",
     smtpPort,
     smtpSecure,

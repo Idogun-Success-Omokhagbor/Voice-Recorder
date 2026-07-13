@@ -28,7 +28,7 @@ jobs:
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@11.7.0 --activate
 
-      - name: Test Brevo email backend
+      - name: Test email backend
         run: pnpm --dir email-backend install --frozen-lockfile && pnpm --dir email-backend test
 
       - name: Set up Java 17

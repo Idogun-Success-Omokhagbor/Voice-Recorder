@@ -8,7 +8,7 @@ const mailer = createEmailTransport(config)
 try {
   await mailer.verify()
 } catch (error) {
-  console.error("Brevo SMTP verification failed", { code: error?.code || "UNKNOWN" })
+  console.error("Email transport verification failed", { code: error?.code || "UNKNOWN" })
   process.exit(1)
 }
 
