@@ -25,6 +25,7 @@ class BackendEmailSender(
         private const val READ_TIMEOUT_MS = 45_000
         private const val MAX_UPLOAD_SIZE_BYTES = 25L * 1024L * 1024L
         private const val HTTP_UNPROCESSABLE_ENTITY = 422
+        private const val HTTP_CONTENT_TOO_LARGE = 413
         private const val HTTP_SUCCESS_MIN = 200
         private const val HTTP_SUCCESS_MAX = 299
         private val supportedMimeTypes = setOf(
@@ -127,6 +128,9 @@ class BackendEmailSender(
             responseCode == HttpURLConnection.HTTP_BAD_REQUEST ||
                 responseCode == HTTP_UNPROCESSABLE_ENTITY -> {
                 failure(R.string.email_backend_invalid_recipient)
+            }
+            responseCode == HTTP_CONTENT_TOO_LARGE -> {
+                failure(R.string.email_backend_attachment_too_large)
             }
             responseCode !in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX -> {
                 failure(R.string.email_backend_server_error)

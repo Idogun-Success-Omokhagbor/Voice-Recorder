@@ -16,7 +16,7 @@ describe("email backend configuration", () => {
     assert.equal(config.smtpHost, "smtp-relay.brevo.com")
     assert.equal(config.smtpPort, 587)
     assert.equal(config.smtpSecure, false)
-    assert.equal(config.maxUploadBytes, 25 * 1024 * 1024)
+    assert.equal(config.maxUploadBytes, 14 * 1024 * 1024)
   })
 
   test("rejects a missing SMTP key", () => {
@@ -37,6 +37,30 @@ describe("email backend configuration", () => {
     assert.throws(
       () => loadConfig({ ...validEnvironment, SMTP_FROM_EMAIL: "invalid" }),
       /valid email address/
+    )
+  })
+
+  test("loads HTTPS API transport without SMTP credentials", () => {
+    const config = loadConfig({
+      BACKEND_BEARER_TOKEN: validEnvironment.BACKEND_BEARER_TOKEN,
+      SMTP_FROM_EMAIL: validEnvironment.SMTP_FROM_EMAIL,
+      EMAIL_TRANSPORT: "api",
+      BREVO_API_KEY: "test-api-key"
+    })
+
+    assert.equal(config.emailTransport, "api")
+    assert.equal(config.smtpUser, null)
+    assert.equal(config.smtpPass, null)
+  })
+
+  test("requires a Brevo API key for API transport", () => {
+    assert.throws(
+      () => loadConfig({
+        BACKEND_BEARER_TOKEN: validEnvironment.BACKEND_BEARER_TOKEN,
+        SMTP_FROM_EMAIL: validEnvironment.SMTP_FROM_EMAIL,
+        EMAIL_TRANSPORT: "api"
+      }),
+      /BREVO_API_KEY/
     )
   })
 })

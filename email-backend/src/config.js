@@ -1,11 +1,6 @@
 import validator from "validator"
 
-const REQUIRED_KEYS = [
-  "BACKEND_BEARER_TOKEN",
-  "SMTP_USER",
-  "SMTP_PASS",
-  "SMTP_FROM_EMAIL"
-]
+const SUPPORTED_TRANSPORTS = new Set(["api", "smtp"])
 
 function requiredValue(env, key) {
   const value = env[key]?.trim()
@@ -24,10 +19,6 @@ function parseInteger(value, name, fallback) {
 }
 
 export function loadConfig(env = process.env) {
-  for (const key of REQUIRED_KEYS) {
-    requiredValue(env, key)
-  }
-
   const backendToken = requiredValue(env, "BACKEND_BEARER_TOKEN")
   if (backendToken.length < 32 || /\s/.test(backendToken)) {
     throw new Error("BACKEND_BEARER_TOKEN must be at least 32 characters without whitespace")
@@ -35,6 +26,10 @@ export function loadConfig(env = process.env) {
 
   const smtpPort = parseInteger(env.SMTP_PORT, "SMTP_PORT", 587)
   const smtpSecure = env.SMTP_SECURE?.toLowerCase() === "true" || smtpPort === 465
+  const emailTransport = env.EMAIL_TRANSPORT?.trim().toLowerCase() || "smtp"
+  if (!SUPPORTED_TRANSPORTS.has(emailTransport)) {
+    throw new Error("EMAIL_TRANSPORT must be api or smtp")
+  }
 
   const smtpFromEmail = requiredValue(env, "SMTP_FROM_EMAIL")
   if (!validator.isEmail(smtpFromEmail, { allow_utf8_local_part: false })) {
@@ -44,13 +39,15 @@ export function loadConfig(env = process.env) {
   return Object.freeze({
     port: parseInteger(env.PORT, "PORT", 3000),
     backendToken,
+    emailTransport,
+    brevoApiKey: emailTransport === "api" ? requiredValue(env, "BREVO_API_KEY") : null,
     smtpHost: env.SMTP_HOST?.trim() || "smtp-relay.brevo.com",
     smtpPort,
     smtpSecure,
-    smtpUser: requiredValue(env, "SMTP_USER"),
-    smtpPass: requiredValue(env, "SMTP_PASS"),
+    smtpUser: emailTransport === "smtp" ? requiredValue(env, "SMTP_USER") : null,
+    smtpPass: emailTransport === "smtp" ? requiredValue(env, "SMTP_PASS") : null,
     smtpFromEmail,
     smtpFromName: env.SMTP_FROM_NAME?.trim() || "Voice Recorder Plus",
-    maxUploadBytes: 25 * 1024 * 1024
+    maxUploadBytes: 14 * 1024 * 1024
   })
 }

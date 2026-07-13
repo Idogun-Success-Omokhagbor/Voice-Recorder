@@ -82,7 +82,7 @@ Connection timeout is 15 seconds and response-read timeout is 45 seconds. The ap
 
 The backend must authenticate and authorize the bearer token server-side, validate the recipient and attachment, rate-limit requests, and return the documented JSON. A token embedded at build time can be extracted from an APK, so it must be scoped, revocable, monitored, and treated as an application credential rather than a private user secret.
 
-The production relay implementation is in [`email-backend`](email-backend). It keeps Brevo SMTP credentials server-side, requires a bearer token before parsing uploads, enforces the same 25 MiB and MIME policies as Android, derives the subject from the validated timestamp, and rate-limits requests. [`render.yaml`](render.yaml) defines a free Render web service; all SMTP credentials, the verified sender address, and the backend bearer token remain deployment secrets.
+The production relay implementation is in [`email-backend`](email-backend). It keeps Brevo credentials server-side, requires a bearer token before parsing uploads, derives the subject from the validated timestamp, and rate-limits requests. The Brevo HTTPS API deployment accepts recordings up to 14 MiB so the base64 attachment remains within Brevo's 20 MB transactional-email limit. [`render.yaml`](render.yaml) defines a free Render web service; the Brevo API key, verified sender address, and backend bearer token remain deployment secrets. SMTP remains available for paid hosts that permit outbound SMTP ports.
 
 ## Local development
 

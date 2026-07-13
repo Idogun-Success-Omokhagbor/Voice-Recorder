@@ -1,9 +1,9 @@
 import { createApp } from "./app.js"
 import { loadConfig } from "./config.js"
-import { createBrevoTransport } from "./mailer.js"
+import { createEmailTransport } from "./mailer.js"
 
 const config = loadConfig()
-const mailer = createBrevoTransport(config)
+const mailer = createEmailTransport(config)
 
 try {
   await mailer.verify()
