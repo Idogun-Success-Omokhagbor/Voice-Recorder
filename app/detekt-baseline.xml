@@ -2,25 +2,19 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>EmptyFunctionBlock:Mp3Recorder.kt$Mp3Recorder${}</ID>
     <ID>EmptyFunctionBlock:PlayerFragment.kt$PlayerFragment.&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:RecordingsAdapter.kt$RecordingsAdapter${}</ID>
     <ID>EmptyFunctionBlock:TrashAdapter.kt$TrashAdapter${}</ID>
     <ID>EmptyFunctionBlock:TrashFragment.kt$TrashFragment${}</ID>
     <ID>EmptyFunctionBlock:WidgetRecordDisplayConfigureActivity.kt$WidgetRecordDisplayConfigureActivity.&lt;no name provided&gt;${}</ID>
     <ID>MagicNumber:Context.kt$60</ID>
-    <ID>MagicNumber:Mp3Recorder.kt$Mp3Recorder$1.25</ID>
-    <ID>MagicNumber:Mp3Recorder.kt$Mp3Recorder$7200</ID>
-    <ID>MagicNumber:Mp3Recorder.kt$Mp3Recorder$8</ID>
     <ID>MagicNumber:RecorderFragment.kt$RecorderFragment$500</ID>
     <ID>MagicNumber:ViewPagerAdapter.kt$ViewPagerAdapter$3</ID>
     <ID>MagicNumber:WidgetRecordDisplayConfigureActivity.kt$WidgetRecordDisplayConfigureActivity$100</ID>
     <ID>MaxLineLength:PlayerFragment.kt$PlayerFragment$if</ID>
-    <ID>PrintStackTrace:Mp3Recorder.kt$Mp3Recorder$e</ID>
     <ID>SwallowedException:Context.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:Activity.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:Context.kt$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:Mp3Recorder.kt$Mp3Recorder$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PlayerFragment.kt$PlayerFragment$e: Exception</ID>
     <ID>TooGenericExceptionCaught:RecorderService.kt$RecorderService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:RenameRecordingDialog.kt$RenameRecordingDialog$e: Exception</ID>

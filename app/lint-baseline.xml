@@ -46,31 +46,6 @@
     </issue>
 
     <issue
-        id="Aligned16KB"
-        message="The native library `x86_64/libandroidlame.so` (from `com.github.naman14:TAndroidLame:1.1`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.1/transforms/b2ce5f1aed99f6a27ccf853da8b335a6/transformed/jetified-TAndroidLame-1.1/jni/x86_64/libandroidlame.so"/>
-    </issue>
-
-    <issue
-        id="Aligned16KB"
-        message="The native library `x86_64/libandroidlame.so` (from `com.github.naman14:TAndroidLame:1.1`) is not 16 KB aligned">
-        <location
-            file="$GRADLE_USER_HOME/caches/9.5.1/transforms/b2ce5f1aed99f6a27ccf853da8b335a6/transformed/jetified-TAndroidLame-1.1/jni/x86_64/libandroidlame.so"/>
-    </issue>
-
-    <issue
-        id="Aligned16KB"
-        message="The native library `x86_64/libandroidlame.so` (from `com.github.naman14:TAndroidLame:1.1`) is not 16 KB aligned"
-        errorLine1="tandroidlame = { module = &quot;com.github.naman14:TAndroidLame&quot;, version.ref = &quot;tandroidlame&quot; }"
-        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="$HOME/work/Voice-Recorder/Voice-Recorder/gradle/libs.versions.toml"
-            line="46"
-            column="17"/>
-    </issue>
-
-    <issue
         id="MissingQuantity"
         message="For locale &quot;cs&quot; (Czech) the following quantity should also be defined: `many` (e.g. &quot;10.0 dne&quot;)"
         errorLine1="    &lt;plurals name=&quot;delete_recordings&quot;>"
