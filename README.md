@@ -78,7 +78,7 @@ Expected failure response:
 
 `message` is optional and is not shown directly to users. Success requires a 2xx status, valid JSON, and an exact Boolean `success` property equal to `true`. String values such as `"true"`, missing properties, malformed JSON, and every non-2xx response fail safely. Recommended status codes are 400 or 422 for invalid input, 401 or 403 for authentication failure, and 5xx for server failure.
 
-Connection timeout is 15 seconds and response-read timeout is 45 seconds. The app does not retry automatically because an uncoordinated retry could send the same email twice. A failed request leaves the finalized recording in Player, keeps the app open, and does not vibrate.
+Connection timeout is 30 seconds and response-read timeout is 90 seconds so a sleeping free-tier relay has time to wake. The app does not retry automatically because an uncoordinated retry could send the same email twice. A failed request leaves the finalized recording in Player, keeps the app open, and does not vibrate.
 
 The backend must authenticate and authorize the bearer token server-side, validate the recipient and attachment, rate-limit requests, and return the documented JSON. A token embedded at build time can be extracted from an APK, so it must be scoped, revocable, monitored, and treated as an application credential rather than a private user secret.
 

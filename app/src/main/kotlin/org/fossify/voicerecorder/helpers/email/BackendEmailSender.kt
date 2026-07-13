@@ -21,8 +21,8 @@ class BackendEmailSender(
     private val allowUnauthenticated: Boolean = BuildConfig.EMAIL_ALLOW_UNAUTHENTICATED
 ) : EmailSender {
     companion object {
-        private const val CONNECT_TIMEOUT_MS = 15_000
-        private const val READ_TIMEOUT_MS = 45_000
+        private const val CONNECT_TIMEOUT_MS = 30_000
+        private const val READ_TIMEOUT_MS = 90_000
         private const val MAX_UPLOAD_SIZE_BYTES = 25L * 1024L * 1024L
         private const val HTTP_UNPROCESSABLE_ENTITY = 422
         private const val HTTP_CONTENT_TOO_LARGE = 413
