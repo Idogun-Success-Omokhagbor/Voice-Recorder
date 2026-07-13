@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: voice-recorder-plus-email
+    runtime: node
+    plan: free
+    rootDir: email-backend
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_FROM_NAME
+        value: Voice Recorder Plus
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: BACKEND_BEARER_TOKEN
+        sync: false
