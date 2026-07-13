@@ -102,7 +102,12 @@ class RecorderService : Service() {
                     stopSelf(startId)
                 }
             }
-            STOP_AMPLITUDE_UPDATE -> amplitudeTimer.cancel()
+            STOP_AMPLITUDE_UPDATE -> {
+                amplitudeTimer.cancel()
+                if (session.currentState() == RecorderSessionState.STOPPED) {
+                    stopSelf(startId)
+                }
+            }
             TOGGLE_PAUSE -> togglePause()
             TOGGLE_RECORDING -> toggleRecordingFromWidget()
             SAVE_RECORDING -> requestStop(RecorderStopRequest.SAVE)

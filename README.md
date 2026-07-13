@@ -56,7 +56,7 @@ mimeType   recording MIME type
 recording  audio attachment
 ```
 
-Accepted client MIME types are `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/ogg`, `audio/opus`, and `application/ogg`. The client rejects known attachments larger than 25 MiB. The backend must enforce the same or a stricter size and MIME policy.
+Accepted client MIME types are `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/ogg`, `audio/opus`, and `application/ogg`. The client rejects known attachments larger than 25 MiB. The backend must enforce the same or a stricter size and MIME policy. The client can send the multipart request with HTTP chunked transfer encoding, so the backend and any reverse proxy in front of it must accept chunked request bodies.
 
 Expected success response:
 
