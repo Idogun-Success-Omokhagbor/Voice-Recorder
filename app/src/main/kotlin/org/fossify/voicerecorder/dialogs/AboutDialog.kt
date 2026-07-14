@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
 import org.fossify.commons.extensions.getAlertDialogBuilder
+import org.fossify.commons.extensions.getProperTextColor
 import org.fossify.commons.extensions.setupDialogStuff
 import org.fossify.commons.extensions.toast
 import org.fossify.voicerecorder.BuildConfig
@@ -17,7 +18,10 @@ class AboutDialog(private val activity: SimpleActivity) {
     }
 
     private val binding = DialogAboutCustomBinding.inflate(activity.layoutInflater).apply {
+        val textColor = activity.getProperTextColor()
         aboutVersion.text = activity.getString(R.string.about_version, BuildConfig.VERSION_NAME)
+        aboutVersion.setTextColor(textColor)
+        aboutForkText.setTextColor(textColor)
         aboutGithub.setOnClickListener {
             openSourceCode()
         }

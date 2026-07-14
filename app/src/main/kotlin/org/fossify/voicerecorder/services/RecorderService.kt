@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.ContentResolver
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -481,17 +482,19 @@ class RecorderService : Service() {
 
     private fun vibrateDevice() {
         try {
+            val effect = VibrationEffect.createOneShot(
+                VIBRATION_DURATION_MS,
+                VibrationEffect.DEFAULT_AMPLITUDE
+            )
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(
-                        VIBRATION_DURATION_MS,
-                        VibrationEffect.DEFAULT_AMPLITUDE
-                    )
-                )
+                vibratorManager?.defaultVibrator?.vibrate(effect, attributes)
             } else {
-                @Suppress("DEPRECATION")
-                (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.vibrate(VIBRATION_DURATION_MS)
+                (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.vibrate(effect, attributes)
             }
         } catch (_: SecurityException) {
         }

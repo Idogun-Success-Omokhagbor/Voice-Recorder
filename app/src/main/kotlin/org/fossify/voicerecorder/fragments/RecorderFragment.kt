@@ -126,7 +126,7 @@ class RecorderFragment(
 
         binding.cancelRecordingButton.applyColorFilter(properTextColor)
         binding.saveRecordingButton.applyColorFilter(properTextColor)
-        binding.recordingEmailButton.applyColorFilter(properTextColor)
+        binding.recordingEmailButton.applyColorFilter(context.getColor(R.color.recording_email_icon))
         binding.recorderVisualizer.chunkColor = properPrimaryColor
         binding.recordingDuration.setTextColor(properTextColor)
     }
