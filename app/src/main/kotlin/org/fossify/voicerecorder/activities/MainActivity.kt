@@ -50,6 +50,7 @@ class MainActivity : SimpleActivity() {
 
     private var bus: EventBus? = null
     private var launchedSettings = false
+    private var checkingAutoRecordNotificationPermission = false
     private var backgroundRecordingWarningDialog: AlertDialog? = null
 
     override var isSearchBarEnabled = true
@@ -207,7 +208,9 @@ class MainActivity : SimpleActivity() {
     private fun handleAudioPermissionAndSetup() {
         handlePermission(PERMISSION_RECORD_AUDIO) {
             if (it) {
-                setupViewPager()
+                handleNotificationPermission {
+                    setupViewPager()
+                }
             } else {
                 toast(org.fossify.commons.R.string.no_audio_permissions)
                 finish()
@@ -294,9 +297,21 @@ class MainActivity : SimpleActivity() {
     }
 
     private fun startRecordingIfConfigured() {
-        if (config.recordAfterLaunch) {
-            binding.viewPager.currentItem = 0
-            binding.mainTabsHolder.getTabAt(0)?.select()
+        if (!config.recordAfterLaunch || checkingAutoRecordNotificationPermission) {
+            return
+        }
+
+        checkingAutoRecordNotificationPermission = true
+        handleNotificationPermission { granted ->
+            checkingAutoRecordNotificationPermission = false
+            if (!granted || isFinishing || isDestroyed) {
+                return@handleNotificationPermission
+            }
+
+            if (binding.viewPager.adapter != null) {
+                binding.viewPager.currentItem = 0
+                binding.mainTabsHolder.getTabAt(0)?.select()
+            }
             Intent(this@MainActivity, RecorderService::class.java).apply {
                 try {
                     startService(this)
