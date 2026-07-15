@@ -22,7 +22,7 @@ class BackendEmailSender(
 ) : EmailSender {
     companion object {
         private const val CONNECT_TIMEOUT_MS = 30_000
-        private const val READ_TIMEOUT_MS = 90_000
+        private const val READ_TIMEOUT_MS = 240_000
         private const val MAX_UPLOAD_SIZE_BYTES = 14L * 1024L * 1024L
         private const val HTTP_UNPROCESSABLE_ENTITY = 422
         private const val HTTP_CONTENT_TOO_LARGE = 413
