@@ -123,6 +123,12 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(KEEP_SCREEN_ON, true)
         set(keepScreenOn) = prefs.edit().putBoolean(KEEP_SCREEN_ON, keepScreenOn).apply()
 
+    var backgroundRecordingWarning: Boolean
+        get() = prefs.getBoolean(BACKGROUND_RECORDING_WARNING, true)
+        set(backgroundRecordingWarning) = prefs.edit()
+            .putBoolean(BACKGROUND_RECORDING_WARNING, backgroundRecordingWarning)
+            .apply()
+
     var wasMicModeWarningShown: Boolean
         get() = prefs.getBoolean(WAS_MIC_MODE_WARNING_SHOWN, false)
         set(wasMicModeWarningShown) = prefs.edit {

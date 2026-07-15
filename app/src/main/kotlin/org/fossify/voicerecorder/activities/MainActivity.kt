@@ -8,6 +8,7 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import me.grantland.widget.AutofitHelper
 import org.fossify.commons.extensions.appLaunched
@@ -31,6 +32,10 @@ import org.fossify.voicerecorder.dialogs.StoragePermissionDialog
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
 import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
+import org.fossify.voicerecorder.helpers.AppVisibilityTracker
+import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
+import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
+import org.fossify.voicerecorder.helpers.SAVE_RECORDING
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
@@ -44,8 +49,8 @@ class MainActivity : SimpleActivity() {
     }
 
     private var bus: EventBus? = null
-    private var handledRecordAfterLaunch = false
     private var launchedSettings = false
+    private var backgroundRecordingWarningDialog: AlertDialog? = null
 
     override var isSearchBarEnabled = true
 
@@ -69,10 +74,10 @@ class MainActivity : SimpleActivity() {
             deleteExpiredTrashedRecordings()
         }
 
-        tryInitVoiceRecorder()
-
         bus = EventBus.getDefault()
         bus!!.register(this)
+
+        tryInitVoiceRecorder()
     }
 
     override fun onResume() {
@@ -88,7 +93,9 @@ class MainActivity : SimpleActivity() {
         }
         setupTabColors()
         getPagerAdapter()?.onResume()
-        startRecordingAfterSettingsReturnIfNeeded()
+        selectRecorderAfterSettingsReturnIfNeeded()
+        startRecordingIfConfigured()
+        sendRecorderAction(GET_RECORDER_INFO)
     }
 
     override fun onPause() {
@@ -97,7 +104,8 @@ class MainActivity : SimpleActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        backgroundRecordingWarningDialog?.dismiss()
+        backgroundRecordingWarningDialog = null
         bus?.unregister(this)
         getPagerAdapter()?.onDestroy()
 
@@ -108,6 +116,7 @@ class MainActivity : SimpleActivity() {
             } catch (ignored: Exception) {
             }
         }
+        super.onDestroy()
     }
 
     override fun onBackPressedCompat(): Boolean {
@@ -271,19 +280,10 @@ class MainActivity : SimpleActivity() {
             openSettingsOnFirstUse()
         }
 
-        startRecordingAfterLaunchIfNeeded()
-    }
-
-    private fun startRecordingAfterLaunchIfNeeded() {
-        if (handledRecordAfterLaunch) {
-            return
-        }
-
-        handledRecordAfterLaunch = true
         startRecordingIfConfigured()
     }
 
-    private fun startRecordingAfterSettingsReturnIfNeeded() {
+    private fun selectRecorderAfterSettingsReturnIfNeeded() {
         if (!launchedSettings) {
             return
         }
@@ -291,11 +291,12 @@ class MainActivity : SimpleActivity() {
         launchedSettings = false
         binding.viewPager.currentItem = 0
         binding.mainTabsHolder.getTabAt(0)?.select()
-        startRecordingIfConfigured()
     }
 
     private fun startRecordingIfConfigured() {
         if (config.recordAfterLaunch) {
+            binding.viewPager.currentItem = 0
+            binding.mainTabsHolder.getTabAt(0)?.select()
             Intent(this@MainActivity, RecorderService::class.java).apply {
                 try {
                     startService(this)
@@ -375,9 +376,48 @@ class MainActivity : SimpleActivity() {
         }
     }
 
+    @Suppress("unused")
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    fun backgroundRecordingWarning(event: Events.BackgroundRecordingWarning) {
+        if (!AppVisibilityTracker.isInForeground() || isFinishing || isDestroyed) {
+            return
+        }
+        if (backgroundRecordingWarningDialog?.isShowing == true) {
+            return
+        }
+
+        backgroundRecordingWarningDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.background_recording_warning)
+            .setMessage(R.string.background_recording_warning_message)
+            .setPositiveButton(R.string.continue_recording) { _, _ ->
+                sendRecorderAction(CONTINUE_RECORDING_AFTER_WARNING)
+            }
+            .setNegativeButton(R.string.save_and_exit) { _, _ ->
+                sendRecorderAction(SAVE_RECORDING)
+            }
+            .setCancelable(false)
+            .create()
+            .apply {
+                setCanceledOnTouchOutside(false)
+                setOnDismissListener { backgroundRecordingWarningDialog = null }
+                show()
+            }
+    }
+
+    private fun sendRecorderAction(recorderAction: String) {
+        Intent(this, RecorderService::class.java).apply {
+            action = recorderAction
+            try {
+                startService(this)
+            } catch (ignored: Exception) {
+            }
+        }
+    }
+
     private fun exitAppAfterSave() {
         Handler(Looper.getMainLooper()).postDelayed({
             finishAndRemoveTask()
+            android.os.Process.killProcess(android.os.Process.myPid())
         }, EXIT_AFTER_SAVE_DELAY_MS)
     }
 }

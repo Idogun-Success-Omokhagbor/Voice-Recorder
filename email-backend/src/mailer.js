@@ -3,9 +3,16 @@ import nodemailer from "nodemailer"
 const BREVO_API_BASE_URL = "https://api.brevo.com/v3"
 
 function apiFailure(code) {
-  const error = new Error("Brevo API request failed")
+  const error = new Error("Email transport request failed")
   error.code = code
   return error
+}
+
+function googleRelayFailureCode(body) {
+  const relayCode = typeof body?.code === "string" ? body.code.trim() : ""
+  return /^[A-Z0-9_]+$/.test(relayCode)
+    ? `GOOGLE_APPS_SCRIPT_${relayCode}`
+    : "GOOGLE_APPS_SCRIPT_REJECTED"
 }
 
 async function requireSuccessfulResponse(response) {
@@ -123,7 +130,7 @@ export function createGoogleAppsScriptTransport(config, fetchImplementation = fe
         throw apiFailure("GOOGLE_APPS_SCRIPT_INVALID_RESPONSE")
       }
       if (body?.success !== true) {
-        throw apiFailure("GOOGLE_APPS_SCRIPT_REJECTED")
+        throw apiFailure(googleRelayFailureCode(body))
       }
 
       return {

@@ -24,7 +24,7 @@
         tools:node="remove" />
 
     <application
-        android:name="org.fossify.commons.FossifyApp"
+        android:name=".VoiceRecorderPlusApp"
         android:allowBackup="true"
         android:appCategory="audio"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -122,6 +122,7 @@
                 <action android:name="org.fossify.voicerecorder.action.SAVE_RECORDING" />
                 <action android:name="org.fossify.voicerecorder.action.CANCEL_RECORDING" />
                 <action android:name="org.fossify.voicerecorder.action.EMAIL_RECORDING" />
+                <action android:name="org.fossify.voicerecorder.action.CONTINUE_RECORDING_AFTER_WARNING" />
             </intent-filter>
         </service>
 

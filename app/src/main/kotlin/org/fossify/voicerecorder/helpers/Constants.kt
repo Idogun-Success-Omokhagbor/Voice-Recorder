@@ -14,6 +14,7 @@ const val TOGGLE_RECORDING = PATH + "TOGGLE_RECORDING"
 const val SAVE_RECORDING = PATH + "SAVE_RECORDING"
 const val CANCEL_RECORDING = PATH + "CANCEL_RECORDING"
 const val EMAIL_RECORDING = PATH + "EMAIL_RECORDING"
+const val CONTINUE_RECORDING_AFTER_WARNING = PATH + "CONTINUE_RECORDING_AFTER_WARNING"
 
 const val EXTENSION_M4A = 0
 const val EXTENSION_OGG = 2
@@ -87,6 +88,7 @@ const val DEFAULT_RECORDING_FOLDER_CONFIRMED = "default_recording_folder_confirm
 const val USE_RECYCLE_BIN = "use_recycle_bin"
 const val LAST_RECYCLE_BIN_CHECK = "last_recycle_bin_check"
 const val KEEP_SCREEN_ON = "keep_screen_on"
+const val BACKGROUND_RECORDING_WARNING = "background_recording_warning"
 const val WAS_MIC_MODE_WARNING_SHOWN = "was_mic_mode_warning_shown"
 const val FILENAME_PATTERN = "filename_pattern"
 

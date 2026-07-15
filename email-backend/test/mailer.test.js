@@ -119,7 +119,33 @@ describe("Google Apps Script transport", () => {
 
   test("rejects a negative relay response", async () => {
     const transport = createGoogleAppsScriptTransport(googleConfig, async () => {
-      return new Response(JSON.stringify({ success: false }), {
+      return new Response(JSON.stringify({ success: false, code: "INVALID_RECIPIENT" }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    })
+
+    await assert.rejects(
+      () => transport.sendMail({
+        to: "recipient@example.com",
+        subject: "Recording - 2026-07-13 10:20:30",
+        text: "Recording attached.",
+        attachments: [{
+          filename: "recording.m4a",
+          content: Buffer.from("audio-data"),
+          contentType: "audio/mp4"
+        }]
+      }),
+      (error) => {
+        assert.equal(error.code, "GOOGLE_APPS_SCRIPT_INVALID_RECIPIENT")
+        return true
+      }
+    )
+  })
+
+  test("does not trust arbitrary relay error text", async () => {
+    const transport = createGoogleAppsScriptTransport(googleConfig, async () => {
+      return new Response(JSON.stringify({ success: false, code: "bad value" }), {
         status: 200,
         headers: { "content-type": "application/json" }
       })

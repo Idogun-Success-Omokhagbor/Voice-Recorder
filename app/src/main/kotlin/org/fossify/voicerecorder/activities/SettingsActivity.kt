@@ -76,6 +76,7 @@ class SettingsActivity : SimpleActivity() {
         setupMicrophoneMode()
         setupRecordAfterLaunch()
         setupKeepScreenOn()
+        setupBackgroundRecordingWarning()
         setupUseRecycleBin()
         setupEmptyRecycleBin()
         updateTextColors(binding.settingsNestedScrollview)
@@ -317,6 +318,14 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsKeepScreenOnHolder.setOnClickListener {
             binding.settingsKeepScreenOn.toggle()
             config.keepScreenOn = binding.settingsKeepScreenOn.isChecked
+        }
+    }
+
+    private fun setupBackgroundRecordingWarning() {
+        binding.settingsBackgroundRecordingWarning.isChecked = config.backgroundRecordingWarning
+        binding.settingsBackgroundRecordingWarningHolder.setOnClickListener {
+            binding.settingsBackgroundRecordingWarning.toggle()
+            config.backgroundRecordingWarning = binding.settingsBackgroundRecordingWarning.isChecked
         }
     }
 

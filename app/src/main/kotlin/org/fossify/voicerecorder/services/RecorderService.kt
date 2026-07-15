@@ -39,7 +39,9 @@ import org.fossify.voicerecorder.extensions.finishPendingMediaStoreRecording
 import org.fossify.voicerecorder.extensions.getFormattedFilename
 import org.fossify.voicerecorder.extensions.shouldUseMediaStoreRecordings
 import org.fossify.voicerecorder.extensions.updateWidgets
+import org.fossify.voicerecorder.helpers.AppVisibilityTracker
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
+import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDER_RUNNING_NOTIF_ID
@@ -69,6 +71,10 @@ class RecorderService : Service() {
     companion object {
         private const val AMPLITUDE_UPDATE_MS = 75L
         private const val VIBRATION_DURATION_MS = 150L
+        private const val RECORDING_NOTIFICATION_CHANNEL_ID = "simple_recorder"
+        private const val WARNING_NOTIFICATION_CHANNEL_ID = "background_recording_warning"
+        private const val CONTINUE_WARNING_REQUEST_CODE = 10001
+        private const val SAVE_WARNING_REQUEST_CODE = 10002
     }
 
     private var recordingPath = ""
@@ -89,7 +95,11 @@ class RecorderService : Service() {
     private var recorder: Recorder? = null
 
     private val session = RecorderSessionController()
+    private val backgroundWarningController = BackgroundRecordingWarningController()
     private val emailSender: EmailSender by lazy { BackendEmailSender(this) }
+
+    @Volatile
+    private var backgroundWarningPending = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -114,6 +124,7 @@ class RecorderService : Service() {
             SAVE_RECORDING -> requestStop(RecorderStopRequest.SAVE)
             CANCEL_RECORDING -> cancelRecording()
             EMAIL_RECORDING -> requestStop(RecorderStopRequest.EMAIL)
+            CONTINUE_RECORDING_AFTER_WARNING -> continueAfterBackgroundWarning()
             else -> startRecording()
         }
 
@@ -130,6 +141,7 @@ class RecorderService : Service() {
         }
 
         session.fail()
+        backgroundWarningPending = false
         status = RECORDING_STOPPED
         stopForeground(STOP_FOREGROUND_REMOVE)
         updateWidgets(false)
@@ -141,10 +153,13 @@ class RecorderService : Service() {
     @SuppressLint("DiscouragedApi")
     private fun startRecording() {
         if (!session.beginRecording()) {
+            broadcastRecorderInfo()
             return
         }
 
         resetRecordingOutput()
+        backgroundWarningController.reset()
+        backgroundWarningPending = false
         updateWidgets(true)
 
         val defaultFolder = File(config.saveRecordingsFolder)
@@ -247,9 +262,13 @@ class RecorderService : Service() {
 
     private fun requestStop(request: RecorderStopRequest) {
         if (!session.requestStop(request)) {
+            if (session.currentState() == RecorderSessionState.STOPPED) {
+                finishService()
+            }
             return
         }
 
+        backgroundWarningPending = false
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
@@ -293,9 +312,13 @@ class RecorderService : Service() {
 
     private fun cancelRecording() {
         if (!session.requestStop(RecorderStopRequest.CANCEL)) {
+            if (session.currentState() == RecorderSessionState.STOPPED) {
+                finishService()
+            }
             return
         }
 
+        backgroundWarningPending = false
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
@@ -319,6 +342,9 @@ class RecorderService : Service() {
     private fun broadcastRecorderInfo() {
         broadcastDuration()
         broadcastStatus()
+        if (backgroundWarningPending) {
+            EventBus.getDefault().post(Events.BackgroundRecordingWarning())
+        }
         if (session.isRecording()) {
             startAmplitudeUpdates()
         } else {
@@ -465,12 +491,36 @@ class RecorderService : Service() {
         finishService()
     }
 
+    private fun showBackgroundRecordingWarning() {
+        backgroundWarningPending = true
+        EventBus.getDefault().post(Events.BackgroundRecordingWarning())
+        startForeground(
+            RECORDER_RUNNING_NOTIF_ID,
+            showBackgroundRecordingWarningNotification()
+        )
+    }
+
+    private fun continueAfterBackgroundWarning() {
+        if (!backgroundWarningPending) {
+            if (session.currentState() == RecorderSessionState.STOPPED) {
+                finishService()
+            }
+            return
+        }
+
+        backgroundWarningPending = false
+        if (session.isRecording()) {
+            startForeground(RECORDER_RUNNING_NOTIF_ID, showNotification())
+        }
+    }
+
     private fun failFinalization() {
         if (!session.fail()) {
             return
         }
 
         deleteCurrentRecordingOutput()
+        backgroundWarningPending = false
         EventBus.getDefault().post(Events.RecordingCompleted())
         finishService()
     }
@@ -506,6 +556,15 @@ class RecorderService : Service() {
                 duration++
                 broadcastDuration()
             }
+
+            val shouldShowWarning = backgroundWarningController.onSecond(
+                isRecording = status == RECORDING_RUNNING,
+                isAppInForeground = AppVisibilityTracker.isInForeground(),
+                isEnabled = config.backgroundRecordingWarning
+            )
+            if (shouldShowWarning) {
+                showBackgroundRecordingWarning()
+            }
         }
     }
 
@@ -520,11 +579,14 @@ class RecorderService : Service() {
     }
 
     private fun showNotification(sendingEmail: Boolean = false): Notification {
-        val channelId = "simple_recorder"
         val label = getString(R.string.app_name)
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
-        NotificationChannel(channelId, label, NotificationManager.IMPORTANCE_DEFAULT).apply {
+        NotificationChannel(
+            RECORDING_NOTIFICATION_CHANNEL_ID,
+            label,
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
             setSound(null, null)
             notificationManager.createNotificationChannel(this)
         }
@@ -535,7 +597,7 @@ class RecorderService : Service() {
             else -> getString(R.string.recording)
         }
 
-        return NotificationCompat.Builder(this, channelId)
+        return NotificationCompat.Builder(this, RECORDING_NOTIFICATION_CHANNEL_ID)
             .setContentTitle(label)
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_graphic_eq_vector)
@@ -546,6 +608,58 @@ class RecorderService : Service() {
             .setOngoing(true)
             .setAutoCancel(true)
             .build()
+    }
+
+    private fun showBackgroundRecordingWarningNotification(): Notification {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        NotificationChannel(
+            WARNING_NOTIFICATION_CHANNEL_ID,
+            getString(R.string.background_recording_warning),
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            setSound(null, null)
+            notificationManager.createNotificationChannel(this)
+        }
+
+        val warningMessage = getString(R.string.background_recording_warning_message)
+        return NotificationCompat.Builder(this, WARNING_NOTIFICATION_CHANNEL_ID)
+            .setContentTitle(getString(R.string.background_recording_warning))
+            .setContentText(warningMessage)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(warningMessage))
+            .setSmallIcon(R.drawable.ic_graphic_eq_vector)
+            .setContentIntent(getOpenAppIntent())
+            .addAction(
+                R.drawable.ic_start_recording_vector,
+                getString(R.string.continue_recording),
+                getRecorderActionIntent(
+                    CONTINUE_RECORDING_AFTER_WARNING,
+                    CONTINUE_WARNING_REQUEST_CODE
+                )
+            )
+            .addAction(
+                R.drawable.ic_save_recording_vector,
+                getString(R.string.save_and_exit),
+                getRecorderActionIntent(SAVE_RECORDING, SAVE_WARNING_REQUEST_CODE)
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOnlyAlertOnce(true)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .build()
+    }
+
+    private fun getRecorderActionIntent(action: String, requestCode: Int): PendingIntent {
+        val intent = Intent(this, RecorderService::class.java).apply {
+            this.action = action
+        }
+        return PendingIntent.getService(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun getOpenAppIntent(): PendingIntent {

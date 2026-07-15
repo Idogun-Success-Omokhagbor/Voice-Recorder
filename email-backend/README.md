@@ -12,6 +12,10 @@ This service receives the authenticated multipart request from the Android app a
 
 Optional values are documented in `.env.example`. Port 587 uses STARTTLS and requires a valid TLS connection.
 
+## Google Apps Script relay
+
+The deployed Apps Script source is in `google-apps-script/Code.gs`. Set a Script Property named `RELAY_SECRET`, deploy the project as a web app running as the owner, and give Render the same secret through `GOOGLE_APPS_SCRIPT_SECRET`. The relay validates any user-entered email address; it does not contain a hard-coded recipient.
+
 ## Local verification
 
 ```powershell
