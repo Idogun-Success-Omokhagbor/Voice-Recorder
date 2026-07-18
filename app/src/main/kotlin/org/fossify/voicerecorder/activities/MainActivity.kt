@@ -2,13 +2,17 @@ package org.fossify.voicerecorder.activities
 
 import android.app.Activity
 import android.content.Intent
+import android.media.AudioAttributes
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import me.grantland.widget.AutofitHelper
 import org.fossify.commons.extensions.appLaunched
@@ -33,10 +37,11 @@ import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
 import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
 import org.fossify.voicerecorder.helpers.AppVisibilityTracker
-import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
-import org.fossify.voicerecorder.helpers.SAVE_RECORDING
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
+import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
+import org.fossify.voicerecorder.helpers.email.EmailSubjectFormatter
+import org.fossify.voicerecorder.helpers.email.RecordingEmailIntentFactory
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
@@ -46,12 +51,12 @@ import org.greenrobot.eventbus.ThreadMode
 class MainActivity : SimpleActivity() {
     companion object {
         private const val EXIT_AFTER_SAVE_DELAY_MS = 500L
+        private const val EMAIL_HANDOFF_VIBRATION_MS = 150L
     }
 
     private var bus: EventBus? = null
     private var launchedSettings = false
     private var checkingAutoRecordNotificationPermission = false
-    private var backgroundRecordingWarningDialog: AlertDialog? = null
 
     override var isSearchBarEnabled = true
 
@@ -105,8 +110,6 @@ class MainActivity : SimpleActivity() {
     }
 
     override fun onDestroy() {
-        backgroundRecordingWarningDialog?.dismiss()
-        backgroundRecordingWarningDialog = null
         bus?.unregister(this)
         getPagerAdapter()?.onDestroy()
 
@@ -375,6 +378,11 @@ class MainActivity : SimpleActivity() {
             toast(event.errorMessage)
         }
 
+        if (event.isEmail) {
+            openEmailClient(event.uri)
+            return
+        }
+
         if (!event.shouldExit) {
             return
         }
@@ -397,26 +405,17 @@ class MainActivity : SimpleActivity() {
         if (!AppVisibilityTracker.isInForeground() || isFinishing || isDestroyed) {
             return
         }
-        if (backgroundRecordingWarningDialog?.isShowing == true) {
-            return
-        }
 
-        backgroundRecordingWarningDialog = AlertDialog.Builder(this)
-            .setTitle(R.string.background_recording_warning)
-            .setMessage(R.string.background_recording_warning_message)
-            .setPositiveButton(R.string.continue_recording) { _, _ ->
-                sendRecorderAction(CONTINUE_RECORDING_AFTER_WARNING)
-            }
-            .setNegativeButton(R.string.save_and_exit) { _, _ ->
-                sendRecorderAction(SAVE_RECORDING)
-            }
-            .setCancelable(false)
-            .create()
-            .apply {
-                setCanceledOnTouchOutside(false)
-                setOnDismissListener { backgroundRecordingWarningDialog = null }
-                show()
-            }
+        Intent(this, BackgroundRecordingWarningActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            startActivity(this)
+        }
+    }
+
+    @Suppress("unused")
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    fun exitApplication(event: Events.ExitApplication) {
+        exitAppAfterSave()
     }
 
     private fun sendRecorderAction(recorderAction: String) {
@@ -424,8 +423,64 @@ class MainActivity : SimpleActivity() {
             action = recorderAction
             try {
                 startService(this)
-            } catch (ignored: Exception) {
+            } catch (_: Exception) {
             }
+        }
+    }
+
+    private fun openEmailClient(recordingUri: android.net.Uri?) {
+        val emailAddress = config.recordingEmailAddress
+        val emailIntent = recordingUri
+            ?.takeIf { EmailAddressValidator.isValid(emailAddress) }
+            ?.let {
+                RecordingEmailIntentFactory.create(
+                    context = this,
+                    recordingUri = it,
+                    recipient = emailAddress,
+                    subject = EmailSubjectFormatter.subject()
+                )
+            }
+
+        if (emailIntent == null) {
+            toast(R.string.no_email_app_available)
+            moveTaskToBack(true)
+            return
+        }
+
+        try {
+            startActivity(emailIntent)
+            vibrateForEmailHandoff()
+        } catch (_: Exception) {
+            toast(R.string.no_email_app_available)
+        }
+        moveTaskToBack(true)
+    }
+
+    private fun vibrateForEmailHandoff() {
+        try {
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(
+                    VibrationEffect.createOneShot(
+                        EMAIL_HANDOFF_VIBRATION_MS,
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    ),
+                    attributes
+                )
+            } else {
+                val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
+                vibrator?.vibrate(
+                    VibrationEffect.createOneShot(
+                        EMAIL_HANDOFF_VIBRATION_MS,
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    ),
+                    attributes
+                )
+            }
+        } catch (_: SecurityException) {
         }
     }
 

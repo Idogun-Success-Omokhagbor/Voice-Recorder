@@ -4,11 +4,11 @@
     android:installLocation="auto">
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -17,6 +17,17 @@
     <uses-feature
         android:name="android.hardware.faketouch"
         android:required="false" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="audio/*" />
+        </intent>
+    </queries>
 
     <!--suppress DeprecatedClassUsageInspection -->
     <uses-permission
@@ -84,6 +95,15 @@
         </activity>
 
         <activity
+            android:name=".activities.BackgroundRecordingWarningActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:theme="@style/AppTheme.WarningDialog"
+            android:turnScreenOn="true" />
+
+        <activity
             android:name=".activities.SettingsActivity"
             android:configChanges="orientation"
             android:exported="false"
@@ -123,6 +143,7 @@
                 <action android:name="org.fossify.voicerecorder.action.CANCEL_RECORDING" />
                 <action android:name="org.fossify.voicerecorder.action.EMAIL_RECORDING" />
                 <action android:name="org.fossify.voicerecorder.action.CONTINUE_RECORDING_AFTER_WARNING" />
+                <action android:name="org.fossify.voicerecorder.action.EXIT_RECORDING_AFTER_WARNING" />
             </intent-filter>
         </service>
 

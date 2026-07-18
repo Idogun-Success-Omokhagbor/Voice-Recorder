@@ -10,12 +10,11 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaScannerConnection
+import android.media.RingtoneManager
 import android.net.Uri
-import android.os.Build
+import android.os.Handler
 import android.os.IBinder
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import org.fossify.commons.extensions.createSAFFileSdk30
@@ -31,6 +30,7 @@ import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.commons.helpers.isRPlus
 import org.fossify.voicerecorder.BuildConfig
 import org.fossify.voicerecorder.R
+import org.fossify.voicerecorder.activities.BackgroundRecordingWarningActivity
 import org.fossify.voicerecorder.activities.SplashActivity
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.createDocumentFile
@@ -43,6 +43,7 @@ import org.fossify.voicerecorder.helpers.AppVisibilityTracker
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
 import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
+import org.fossify.voicerecorder.helpers.EXIT_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDER_RUNNING_NOTIF_ID
 import org.fossify.voicerecorder.helpers.RECORDING_PAUSED
@@ -52,12 +53,6 @@ import org.fossify.voicerecorder.helpers.SAVE_RECORDING
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.helpers.TOGGLE_PAUSE
 import org.fossify.voicerecorder.helpers.TOGGLE_RECORDING
-import org.fossify.voicerecorder.helpers.email.BackendEmailSender
-import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
-import org.fossify.voicerecorder.helpers.email.EmailSendRequest
-import org.fossify.voicerecorder.helpers.email.EmailSendResult
-import org.fossify.voicerecorder.helpers.email.EmailSender
-import org.fossify.voicerecorder.helpers.email.EmailSubjectFormatter
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.recorder.MediaRecorderWrapper
 import org.fossify.voicerecorder.recorder.Recorder
@@ -70,11 +65,15 @@ import java.util.TimerTask
 class RecorderService : Service() {
     companion object {
         private const val AMPLITUDE_UPDATE_MS = 75L
-        private const val VIBRATION_DURATION_MS = 150L
+        private const val PROCESS_EXIT_DELAY_MS = 500L
         private const val RECORDING_NOTIFICATION_CHANNEL_ID = "simple_recorder"
-        private const val WARNING_NOTIFICATION_CHANNEL_ID = "background_recording_warning"
+        private const val WARNING_NOTIFICATION_CHANNEL_ID = "background_recording_warning_v2"
         private const val CONTINUE_WARNING_REQUEST_CODE = 10001
         private const val SAVE_WARNING_REQUEST_CODE = 10002
+        private const val EXIT_WARNING_REQUEST_CODE = 10003
+        private const val OPEN_WARNING_REQUEST_CODE = 10004
+        private const val WARNING_VIBRATION_MS = 500L
+        private const val WARNING_VIBRATION_PAUSE_MS = 250L
     }
 
     private var recordingPath = ""
@@ -95,8 +94,9 @@ class RecorderService : Service() {
     private var recorder: Recorder? = null
 
     private val session = RecorderSessionController()
-    private val backgroundWarningController = BackgroundRecordingWarningController()
-    private val emailSender: EmailSender by lazy { BackendEmailSender(this) }
+    private val backgroundWarningController = BackgroundRecordingWarningController(
+        BuildConfig.BACKGROUND_WARNING_THRESHOLD_SECONDS
+    )
 
     @Volatile
     private var backgroundWarningPending = false
@@ -125,6 +125,7 @@ class RecorderService : Service() {
             CANCEL_RECORDING -> cancelRecording()
             EMAIL_RECORDING -> requestStop(RecorderStopRequest.EMAIL)
             CONTINUE_RECORDING_AFTER_WARNING -> continueAfterBackgroundWarning()
+            EXIT_RECORDING_AFTER_WARNING -> cancelRecording(exitAfterCancellation = true)
             else -> startRecording()
         }
 
@@ -272,14 +273,7 @@ class RecorderService : Service() {
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
-        if (request == RecorderStopRequest.EMAIL) {
-            startForeground(
-                RECORDER_RUNNING_NOTIF_ID,
-                showNotification(sendingEmail = true)
-            )
-        } else {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
 
         val activeRecorder = recorder
         recorder = null
@@ -310,7 +304,7 @@ class RecorderService : Service() {
         }
     }
 
-    private fun cancelRecording() {
+    private fun cancelRecording(exitAfterCancellation: Boolean = false) {
         if (!session.requestStop(RecorderStopRequest.CANCEL)) {
             if (session.currentState() == RecorderSessionState.STOPPED) {
                 finishService()
@@ -334,8 +328,14 @@ class RecorderService : Service() {
             deleteCurrentRecordingOutput()
             if (session.completeCancellation()) {
                 EventBus.getDefault().post(Events.RecordingCompleted())
+                if (exitAfterCancellation) {
+                    EventBus.getDefault().post(Events.ExitApplication())
+                }
             }
             finishService()
+            if (exitAfterCancellation) {
+                terminateProcessAfterDelay()
+            }
         }
     }
 
@@ -426,7 +426,7 @@ class RecorderService : Service() {
         EventBus.getDefault().post(Events.RecordingCompleted())
         when (request) {
             RecorderStopRequest.SAVE -> completeSave(recordingUri)
-            RecorderStopRequest.EMAIL -> beginEmailUpload(recordingUri)
+            RecorderStopRequest.EMAIL -> completeEmail(recordingUri)
             RecorderStopRequest.CANCEL -> failFinalization()
         }
     }
@@ -445,47 +445,16 @@ class RecorderService : Service() {
         finishService()
     }
 
-    private fun beginEmailUpload(recordingUri: Uri) {
-        if (!session.beginUpload()) {
+    private fun completeEmail(recordingUri: Uri) {
+        if (!session.completeEmail()) {
             finishService()
             return
         }
-
-        val emailAddress = config.recordingEmailAddress
-        val result = if (EmailAddressValidator.isValid(emailAddress)) {
-            sendRecordingByEmail(recordingUri, emailAddress)
-        } else {
-            EmailSendResult(false, getString(R.string.invalid_email_address))
-        }
-        completeEmail(recordingUri, result)
-    }
-
-    private fun sendRecordingByEmail(recordingUri: Uri, emailAddress: String): EmailSendResult {
-        val timestamp = EmailSubjectFormatter.timestamp()
-        return emailSender.send(
-            EmailSendRequest(
-                recipient = emailAddress,
-                subject = EmailSubjectFormatter.subject(timestamp),
-                recordingUri = recordingUri,
-                fileName = recordingFileName,
-                mimeType = recordingMimeType.ifBlank { recordingPath.getMimeType() },
-                timestamp = timestamp
-            )
-        )
-    }
-
-    private fun completeEmail(recordingUri: Uri, result: EmailSendResult) {
-        val completion = session.completeEmail(result.success) ?: return
-        if (completion.shouldVibrate) {
-            vibrateDevice()
-        }
-
         EventBus.getDefault().post(
             Events.RecordingSaved(
                 uri = recordingUri,
                 isEmail = true,
-                shouldExit = completion.shouldExit,
-                errorMessage = result.message.takeUnless { result.success }
+                shouldExit = false
             )
         )
         finishService()
@@ -530,26 +499,6 @@ class RecorderService : Service() {
         stopSelf()
     }
 
-    private fun vibrateDevice() {
-        try {
-            val effect = VibrationEffect.createOneShot(
-                VIBRATION_DURATION_MS,
-                VibrationEffect.DEFAULT_AMPLITUDE
-            )
-            val attributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .build()
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(effect, attributes)
-            } else {
-                (getSystemService(VIBRATOR_SERVICE) as? Vibrator)?.vibrate(effect, attributes)
-            }
-        } catch (_: SecurityException) {
-        }
-    }
-
     private fun getDurationUpdateTask() = object : TimerTask() {
         override fun run() {
             if (status == RECORDING_RUNNING) {
@@ -578,7 +527,7 @@ class RecorderService : Service() {
         }
     }
 
-    private fun showNotification(sendingEmail: Boolean = false): Notification {
+    private fun showNotification(): Notification {
         val label = getString(R.string.app_name)
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
@@ -592,7 +541,6 @@ class RecorderService : Service() {
         }
 
         val text = when {
-            sendingEmail -> getString(R.string.sending_recording)
             status == RECORDING_PAUSED -> "${getString(R.string.recording)} (${getString(R.string.paused)})"
             else -> getString(R.string.recording)
         }
@@ -612,22 +560,31 @@ class RecorderService : Service() {
 
     private fun showBackgroundRecordingWarningNotification(): Notification {
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val warningAudioAttributes = AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .build()
         NotificationChannel(
             WARNING_NOTIFICATION_CHANNEL_ID,
             getString(R.string.background_recording_warning),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            setSound(null, null)
+            enableVibration(true)
+            setSound(sound, warningAudioAttributes)
             notificationManager.createNotificationChannel(this)
         }
 
         val warningMessage = getString(R.string.background_recording_warning_message)
+        val openWarningIntent = getWarningActivityIntent()
         return NotificationCompat.Builder(this, WARNING_NOTIFICATION_CHANNEL_ID)
             .setContentTitle(getString(R.string.background_recording_warning))
             .setContentText(warningMessage)
             .setStyle(NotificationCompat.BigTextStyle().bigText(warningMessage))
             .setSmallIcon(R.drawable.ic_graphic_eq_vector)
-            .setContentIntent(getOpenAppIntent())
+            .setContentIntent(openWarningIntent)
+            .setFullScreenIntent(openWarningIntent, true)
             .addAction(
                 R.drawable.ic_start_recording_vector,
                 getString(R.string.continue_recording),
@@ -641,13 +598,44 @@ class RecorderService : Service() {
                 getString(R.string.save_and_exit),
                 getRecorderActionIntent(SAVE_RECORDING, SAVE_WARNING_REQUEST_CODE)
             )
+            .addAction(
+                R.drawable.ic_cancel_recording_vector,
+                getString(R.string.exit_without_saving),
+                getRecorderActionIntent(
+                    EXIT_RECORDING_AFTER_WARNING,
+                    EXIT_WARNING_REQUEST_CODE
+                )
+            )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setSound(sound)
+            .setVibrate(
+                longArrayOf(
+                    0L,
+                    WARNING_VIBRATION_MS,
+                    WARNING_VIBRATION_PAUSE_MS,
+                    WARNING_VIBRATION_MS
+                )
+            )
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setAutoCancel(false)
             .build()
+    }
+
+    private fun getWarningActivityIntent(): PendingIntent {
+        val intent = Intent(this, BackgroundRecordingWarningActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        return PendingIntent.getActivity(
+            this,
+            OPEN_WARNING_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun getRecorderActionIntent(action: String, requestCode: Int): PendingIntent {
@@ -688,6 +676,12 @@ class RecorderService : Service() {
     private fun cancelRecordingTimers() {
         durationTimer.cancel()
         amplitudeTimer.cancel()
+    }
+
+    private fun terminateProcessAfterDelay() {
+        Handler(Looper.getMainLooper()).postDelayed({
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }, PROCESS_EXIT_DELAY_MS)
     }
 
     private fun resetRecordingOutput() {

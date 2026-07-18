@@ -11,5 +11,3 @@ keystore.properties
 fastlane/fastlane.json
 fastlane/report.xml
 .kotlin/
-email-backend/.env
-email-backend/node_modules/

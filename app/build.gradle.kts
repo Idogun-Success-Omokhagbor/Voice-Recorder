@@ -22,23 +22,6 @@ fun hasSigningVars(): Boolean {
             && providers.environmentVariable("SIGNING_STORE_PASSWORD").orNull != null
 }
 
-fun configuredValue(name: String) = providers.gradleProperty(name)
-    .orElse(providers.environmentVariable(name))
-    .orElse("")
-    .get()
-
-fun String.asBuildConfigString() = this
-    .replace("\\", "\\\\")
-    .replace("\"", "\\\"")
-
-val emailBackendUrl = configuredValue("VOICE_RECORDER_PLUS_EMAIL_BACKEND_URL")
-    .asBuildConfigString()
-val emailBackendToken = configuredValue("VOICE_RECORDER_PLUS_EMAIL_BACKEND_TOKEN")
-    .asBuildConfigString()
-val allowUnauthenticatedEmailBackend =
-    configuredValue("VOICE_RECORDER_PLUS_EMAIL_ALLOW_UNAUTHENTICATED")
-        .equals("true", ignoreCase = true)
-
 base {
     val versionCode = project.property("VERSION_CODE").toString().toInt()
     archivesName = "voicerecorder-$versionCode"
@@ -54,13 +37,7 @@ android {
         versionName = project.property("VERSION_NAME").toString()
         versionCode = project.property("VERSION_CODE").toString().toInt()
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "EMAIL_BACKEND_URL", "\"$emailBackendUrl\"")
-        buildConfigField("String", "EMAIL_BACKEND_TOKEN", "\"$emailBackendToken\"")
-        buildConfigField(
-            "boolean",
-            "EMAIL_ALLOW_UNAUTHENTICATED",
-            allowUnauthenticatedEmailBackend.toString()
-        )
+        buildConfigField("int", "BACKGROUND_WARNING_THRESHOLD_SECONDS", "3600")
     }
 
     signingConfigs {
@@ -91,6 +68,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            buildConfigField("int", "BACKGROUND_WARNING_THRESHOLD_SECONDS", "5")
         }
         release {
             isMinifyEnabled = true
