@@ -453,7 +453,8 @@ class MainActivity : SimpleActivity() {
         } catch (_: Exception) {
             toast(R.string.no_email_app_available)
         }
-        moveTaskToBack(true)
+        // Exit to background immediately without waiting
+        finish()
     }
 
     private fun vibrateForEmailHandoff() {

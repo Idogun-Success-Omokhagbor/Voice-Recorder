@@ -20,10 +20,18 @@ internal object RecordingEmailIntentFactory {
             Intent.ACTION_SENDTO,
             Uri.fromParts("mailto", recipient, null)
         )
+        
+        // Get all available email packages
         val emailPackages = packageManager
             .queryIntentActivities(mailIntent, PackageManager.MATCH_DEFAULT_ONLY)
             .mapNotNull { it.activityInfo?.packageName }
             .distinct()
+
+        // Find the default email app
+        val defaultPackage = packageManager
+            .resolveActivity(mailIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo
+            ?.packageName
 
         val attachmentIntent = Intent(Intent.ACTION_SEND).apply {
             type = context.contentResolver.getType(recordingUri) ?: "audio/*"
@@ -39,31 +47,14 @@ internal object RecordingEmailIntentFactory {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        val targetedIntents = emailPackages.mapNotNull { packageName ->
-            Intent(attachmentIntent)
-                .setPackage(packageName)
-                .takeIf { it.resolveActivity(packageManager) != null }
-        }
-        if (targetedIntents.isEmpty()) {
-            return null
-        }
-
-        val defaultPackage = packageManager
-            .resolveActivity(mailIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            ?.activityInfo
-            ?.packageName
-        targetedIntents.firstOrNull { it.`package` == defaultPackage }?.let { return it }
-        if (targetedIntents.size == 1) {
-            return targetedIntents.single()
+        // Use default email app if available, otherwise use first available
+        val targetPackage = defaultPackage ?: emailPackages.firstOrNull()
+        if (targetPackage != null) {
+            return Intent(attachmentIntent).apply {
+                setPackage(targetPackage)
+            }
         }
 
-        return Intent.createChooser(
-            targetedIntents.first(),
-            context.getString(R.string.choose_email_app)
-        ).apply {
-            putExtra(Intent.EXTRA_INITIAL_INTENTS, targetedIntents.drop(1).toTypedArray())
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        return null
     }
 }

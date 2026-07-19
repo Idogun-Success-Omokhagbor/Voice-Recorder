@@ -208,25 +208,8 @@ class RecorderFragment(
             return
         }
 
-        val existingAddress = activity.config.recordingEmailAddress
-        if (!EmailAddressValidator.isValid(existingAddress)) {
-            promptForRecordingEmailAddress()
-        } else {
-            sendRecordingByEmail()
-        }
-    }
-
-    private fun promptForRecordingEmailAddress() {
-        val activity = context as? SimpleActivity ?: return
-        RecordEmailAddressDialog(
-            activity = activity,
-            initialAddress = activity.config.recordingEmailAddress,
-            callback = {
-                activity.config.recordingEmailAddress = it
-                sendRecordingByEmail()
-            },
-            onDismiss = {}
-        )
+        // Immediately send email without any dialog - proceed silently with configured address
+        sendRecordingByEmail()
     }
 
     private fun sendRecordingByEmail() {
