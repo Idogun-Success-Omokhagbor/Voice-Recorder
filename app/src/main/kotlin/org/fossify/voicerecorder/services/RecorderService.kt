@@ -53,6 +53,8 @@ import org.fossify.voicerecorder.helpers.SAVE_RECORDING
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.helpers.TOGGLE_PAUSE
 import org.fossify.voicerecorder.helpers.TOGGLE_RECORDING
+import org.fossify.voicerecorder.helpers.email.EmailSendResult
+import org.fossify.voicerecorder.helpers.email.RecordingEmailDelivery
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.recorder.MediaRecorderWrapper
 import org.fossify.voicerecorder.recorder.Recorder
@@ -97,6 +99,7 @@ class RecorderService : Service() {
     private val backgroundWarningController = BackgroundRecordingWarningController(
         BuildConfig.BACKGROUND_WARNING_THRESHOLD_SECONDS
     )
+    private val emailDelivery: RecordingEmailDelivery by lazy { RecordingEmailDelivery(this) }
 
     @Volatile
     private var backgroundWarningPending = false
@@ -273,7 +276,14 @@ class RecorderService : Service() {
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (request == RecorderStopRequest.EMAIL) {
+            startForeground(
+                RECORDER_RUNNING_NOTIF_ID,
+                showNotification(sendingEmail = true)
+            )
+        } else {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
 
         val activeRecorder = recorder
         recorder = null
@@ -426,7 +436,7 @@ class RecorderService : Service() {
         EventBus.getDefault().post(Events.RecordingCompleted())
         when (request) {
             RecorderStopRequest.SAVE -> completeSave(recordingUri)
-            RecorderStopRequest.EMAIL -> completeEmail(recordingUri)
+            RecorderStopRequest.EMAIL -> beginEmailUpload(recordingUri)
             RecorderStopRequest.CANCEL -> failFinalization()
         }
     }
@@ -445,19 +455,41 @@ class RecorderService : Service() {
         finishService()
     }
 
-    private fun completeEmail(recordingUri: Uri) {
-        if (!session.completeEmail()) {
+    private fun beginEmailUpload(recordingUri: Uri) {
+        if (!session.beginUpload()) {
             finishService()
             return
         }
+
+        ensureBackgroundThread {
+            val result = emailDelivery.send(
+                recordingUri = recordingUri,
+                fileName = recordingFileName,
+                mimeType = recordingMimeType.ifBlank { recordingPath.getMimeType() }
+            )
+            completeEmail(recordingUri, result)
+        }
+    }
+
+    private fun completeEmail(recordingUri: Uri, result: EmailSendResult) {
+        val completion = session.completeEmail(result.success) ?: return
+        if (completion.shouldVibrate) {
+            emailDelivery.vibrate()
+        } else {
+            toast(result.message)
+        }
+
         EventBus.getDefault().post(
             Events.RecordingSaved(
                 uri = recordingUri,
                 isEmail = true,
-                shouldExit = false
+                shouldExit = completion.shouldExit
             )
         )
         finishService()
+        if (completion.shouldExit) {
+            terminateProcessAfterDelay()
+        }
     }
 
     private fun showBackgroundRecordingWarning() {
@@ -527,7 +559,7 @@ class RecorderService : Service() {
         }
     }
 
-    private fun showNotification(): Notification {
+    private fun showNotification(sendingEmail: Boolean = false): Notification {
         val label = getString(R.string.app_name)
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
@@ -541,6 +573,7 @@ class RecorderService : Service() {
         }
 
         val text = when {
+            sendingEmail -> getString(R.string.sending_recording)
             status == RECORDING_PAUSED -> "${getString(R.string.recording)} (${getString(R.string.paused)})"
             else -> getString(R.string.recording)
         }

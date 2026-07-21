@@ -5,7 +5,8 @@ internal enum class RecorderSessionState {
     RECORDING,
     FINALIZING_SAVE,
     FINALIZING_EMAIL,
-    CANCELLING
+    CANCELLING,
+    UPLOADING
 }
 
 internal enum class RecorderStopRequest {
@@ -13,6 +14,11 @@ internal enum class RecorderStopRequest {
     EMAIL,
     CANCEL
 }
+
+internal data class EmailCompletion(
+    val shouldVibrate: Boolean,
+    val shouldExit: Boolean
+)
 
 internal class RecorderSessionController {
     private var state = RecorderSessionState.STOPPED
@@ -42,12 +48,12 @@ internal class RecorderSessionController {
     }
 
     @Synchronized
-    fun completeEmail(): Boolean {
+    fun beginUpload(): Boolean {
         if (state != RecorderSessionState.FINALIZING_EMAIL) {
             return false
         }
 
-        state = RecorderSessionState.STOPPED
+        state = RecorderSessionState.UPLOADING
         return true
     }
 
@@ -69,6 +75,19 @@ internal class RecorderSessionController {
 
         state = RecorderSessionState.STOPPED
         return true
+    }
+
+    @Synchronized
+    fun completeEmail(success: Boolean): EmailCompletion? {
+        if (state != RecorderSessionState.UPLOADING) {
+            return null
+        }
+
+        state = RecorderSessionState.STOPPED
+        return EmailCompletion(
+            shouldVibrate = success,
+            shouldExit = success
+        )
     }
 
     @Synchronized

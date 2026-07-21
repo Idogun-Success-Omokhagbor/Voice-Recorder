@@ -26,7 +26,6 @@ import org.fossify.voicerecorder.databinding.FragmentRecorderBinding
 import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.ensureStoragePermission
 import org.fossify.voicerecorder.extensions.setKeepScreenAwake
-import org.fossify.voicerecorder.dialogs.RecordEmailAddressDialog
 import org.fossify.voicerecorder.activities.SimpleActivity
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
@@ -36,7 +35,6 @@ import org.fossify.voicerecorder.helpers.RECORDING_RUNNING
 import org.fossify.voicerecorder.helpers.RECORDING_STOPPED
 import org.fossify.voicerecorder.helpers.SAVE_RECORDING
 import org.fossify.voicerecorder.helpers.TOGGLE_PAUSE
-import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
@@ -208,8 +206,8 @@ class RecorderFragment(
             return
         }
 
-        // Immediately send email without any dialog - proceed silently with configured address
         sendRecordingByEmail()
+        activity.moveTaskToBack(true)
     }
 
     private fun sendRecordingByEmail() {

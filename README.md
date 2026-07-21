@@ -18,11 +18,18 @@ On Android 10 and newer, default recordings are created through MediaStore. The 
 
 Recordings in the previous default folders `Music/Recordings` and `Music/Fossify Voice Recorder` remain discoverable in Player. They are not moved automatically. This avoids file-loss risk and avoids treating an unrelated custom folder named `Recordings` as an app folder.
 
-## Email handoff
+## Automatic email
 
-Record and email finalizes the recording, then opens the device's default email application with the recipient, subject, and audio attachment filled in. If no default email application is configured, Android offers the installed email applications. The user remains responsible for tapping Send in the email application.
+Record and email finalizes the recording and immediately moves the recorder task to the background. The foreground service uploads the recording to a configured Google Apps Script web app, which sends the message from the relay owner's Google account. A confirmed send vibrates the device and terminates the recorder process; a failed send leaves the recording saved locally.
 
-This project has no email server, relay, provider credential, backend token, or network API dependency. If the device has no compatible email application, the recording remains saved locally and the app displays an error.
+The relay source and ownership instructions are in [`email-relay`](email-relay). Configure the endpoint and secret only through untracked Gradle properties or environment variables:
+
+```text
+VOICE_RECORDER_PLUS_EMAIL_RELAY_URL=https://script.google.com/macros/s/DEPLOYMENT_ID/exec
+VOICE_RECORDER_PLUS_EMAIL_RELAY_SECRET=the-script-property-value
+```
+
+Neither value is committed. Builds without both values fail email safely and retain the recording. The relay account owner controls outgoing messages and Google Apps Script quotas.
 
 ## Background recording warning
 

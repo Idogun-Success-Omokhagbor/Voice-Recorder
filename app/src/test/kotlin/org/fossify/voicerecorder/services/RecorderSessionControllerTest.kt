@@ -2,6 +2,7 @@ package org.fossify.voicerecorder.services
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -19,14 +20,13 @@ class RecorderSessionControllerTest {
     }
 
     @Test
-    fun `repeated email tap finalizes once`() {
+    fun `repeated email tap starts one upload`() {
         val controller = recordingController()
 
         assertTrue(controller.requestStop(RecorderStopRequest.EMAIL))
         assertFalse(controller.requestStop(RecorderStopRequest.EMAIL))
-        assertTrue(controller.completeEmail())
-        assertFalse(controller.completeEmail())
-        assertEquals(RecorderSessionState.STOPPED, controller.currentState())
+        assertTrue(controller.beginUpload())
+        assertFalse(controller.beginUpload())
     }
 
     @Test
@@ -46,6 +46,26 @@ class RecorderSessionControllerTest {
         assertTrue(controller.completeCancellation())
         assertFalse(controller.completeSave())
         assertEquals(RecorderSessionState.STOPPED, controller.currentState())
+    }
+
+    @Test
+    fun `successful email requests vibration and exit`() {
+        val controller = uploadingController()
+
+        val completion = controller.completeEmail(success = true)
+
+        assertEquals(EmailCompletion(shouldVibrate = true, shouldExit = true), completion)
+        assertNull(controller.completeEmail(success = true))
+    }
+
+    @Test
+    fun `failed email requests no vibration or exit`() {
+        val controller = uploadingController()
+
+        val completion = controller.completeEmail(success = false)
+
+        assertEquals(EmailCompletion(shouldVibrate = false, shouldExit = false), completion)
+        assertNull(controller.completeEmail(success = false))
     }
 
     @Test
@@ -70,5 +90,10 @@ class RecorderSessionControllerTest {
 
     private fun recordingController() = RecorderSessionController().apply {
         assertTrue(beginRecording())
+    }
+
+    private fun uploadingController() = recordingController().apply {
+        assertTrue(requestStop(RecorderStopRequest.EMAIL))
+        assertTrue(beginUpload())
     }
 }

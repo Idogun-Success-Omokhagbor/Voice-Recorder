@@ -22,6 +22,20 @@ fun hasSigningVars(): Boolean {
             && providers.environmentVariable("SIGNING_STORE_PASSWORD").orNull != null
 }
 
+fun configuredValue(name: String) = providers.gradleProperty(name)
+    .orElse(providers.environmentVariable(name))
+    .orElse("")
+    .get()
+
+fun String.asBuildConfigString() = this
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
+val emailRelayUrl = configuredValue("VOICE_RECORDER_PLUS_EMAIL_RELAY_URL")
+    .asBuildConfigString()
+val emailRelaySecret = configuredValue("VOICE_RECORDER_PLUS_EMAIL_RELAY_SECRET")
+    .asBuildConfigString()
+
 base {
     val versionCode = project.property("VERSION_CODE").toString().toInt()
     archivesName = "voicerecorder-$versionCode"
@@ -38,6 +52,8 @@ android {
         versionCode = project.property("VERSION_CODE").toString().toInt()
         vectorDrawables.useSupportLibrary = true
         buildConfigField("int", "BACKGROUND_WARNING_THRESHOLD_SECONDS", "3600")
+        buildConfigField("String", "EMAIL_RELAY_URL", "\"$emailRelayUrl\"")
+        buildConfigField("String", "EMAIL_RELAY_SECRET", "\"$emailRelaySecret\"")
     }
 
     signingConfigs {

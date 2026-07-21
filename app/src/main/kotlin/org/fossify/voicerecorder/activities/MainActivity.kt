@@ -2,14 +2,9 @@ package org.fossify.voicerecorder.activities
 
 import android.app.Activity
 import android.content.Intent
-import android.media.AudioAttributes
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
@@ -39,9 +34,6 @@ import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
 import org.fossify.voicerecorder.helpers.AppVisibilityTracker
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
-import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
-import org.fossify.voicerecorder.helpers.email.EmailSubjectFormatter
-import org.fossify.voicerecorder.helpers.email.RecordingEmailIntentFactory
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
@@ -51,7 +43,6 @@ import org.greenrobot.eventbus.ThreadMode
 class MainActivity : SimpleActivity() {
     companion object {
         private const val EXIT_AFTER_SAVE_DELAY_MS = 500L
-        private const val EMAIL_HANDOFF_VIBRATION_MS = 150L
     }
 
     private var bus: EventBus? = null
@@ -378,11 +369,6 @@ class MainActivity : SimpleActivity() {
             toast(event.errorMessage)
         }
 
-        if (event.isEmail) {
-            openEmailClient(event.uri)
-            return
-        }
-
         if (!event.shouldExit) {
             return
         }
@@ -425,63 +411,6 @@ class MainActivity : SimpleActivity() {
                 startService(this)
             } catch (_: Exception) {
             }
-        }
-    }
-
-    private fun openEmailClient(recordingUri: android.net.Uri?) {
-        val emailAddress = config.recordingEmailAddress
-        val emailIntent = recordingUri
-            ?.takeIf { EmailAddressValidator.isValid(emailAddress) }
-            ?.let {
-                RecordingEmailIntentFactory.create(
-                    context = this,
-                    recordingUri = it,
-                    recipient = emailAddress,
-                    subject = EmailSubjectFormatter.subject()
-                )
-            }
-
-        if (emailIntent == null) {
-            toast(R.string.no_email_app_available)
-            moveTaskToBack(true)
-            return
-        }
-
-        try {
-            startActivity(emailIntent)
-            vibrateForEmailHandoff()
-        } catch (_: Exception) {
-            toast(R.string.no_email_app_available)
-        }
-        // Exit to background immediately without waiting
-        finish()
-    }
-
-    private fun vibrateForEmailHandoff() {
-        try {
-            val attributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .build()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(
-                        EMAIL_HANDOFF_VIBRATION_MS,
-                        VibrationEffect.DEFAULT_AMPLITUDE
-                    ),
-                    attributes
-                )
-            } else {
-                val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
-                vibrator?.vibrate(
-                    VibrationEffect.createOneShot(
-                        EMAIL_HANDOFF_VIBRATION_MS,
-                        VibrationEffect.DEFAULT_AMPLITUDE
-                    ),
-                    attributes
-                )
-            }
-        } catch (_: SecurityException) {
         }
     }
 
