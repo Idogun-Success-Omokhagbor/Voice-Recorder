@@ -71,6 +71,7 @@ class SettingsActivity : SimpleActivity() {
         setupFilenamePattern()
         setupExtension()
         setupRecordAndEmail()
+        setupEditEmailBeforeSending()
         setupBitrate()
         setupSamplingRate()
         setupMicrophoneMode()
@@ -204,6 +205,7 @@ class SettingsActivity : SimpleActivity() {
 
     private fun setupRecordAndEmail() {
         binding.settingsRecordAndEmail.isChecked = config.recordAndEmail
+        updateEditEmailBeforeSendingVisibility()
         binding.settingsRecordAndEmailHolder.setOnClickListener {
             binding.settingsRecordAndEmail.toggle()
             val enabled = binding.settingsRecordAndEmail.isChecked
@@ -213,16 +215,31 @@ class SettingsActivity : SimpleActivity() {
                     onAddressSaved = {
                         config.recordingEmailAddress = it
                         config.recordAndEmail = true
+                        updateEditEmailBeforeSendingVisibility()
                     },
                     onAddressDismissed = {
                         binding.settingsRecordAndEmail.isChecked = false
                         config.recordAndEmail = false
+                        updateEditEmailBeforeSendingVisibility()
                     }
                 )
             } else {
                 config.recordAndEmail = false
+                updateEditEmailBeforeSendingVisibility()
             }
         }
+    }
+
+    private fun setupEditEmailBeforeSending() {
+        binding.settingsEditEmailBeforeSending.isChecked = config.editEmailBeforeSending
+        binding.settingsEditEmailBeforeSendingHolder.setOnClickListener {
+            binding.settingsEditEmailBeforeSending.toggle()
+            config.editEmailBeforeSending = binding.settingsEditEmailBeforeSending.isChecked
+        }
+    }
+
+    private fun updateEditEmailBeforeSendingVisibility() {
+        binding.settingsEditEmailBeforeSendingHolder.beVisibleIf(config.recordAndEmail)
     }
 
     private fun showRecordEmailAddressDialog(

@@ -147,4 +147,10 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getString(RECORDING_EMAIL_ADDRESS, "")!!
         set(recordingEmailAddress) = prefs.edit().putString(RECORDING_EMAIL_ADDRESS, recordingEmailAddress)
             .apply()
+
+    var editEmailBeforeSending: Boolean
+        get() = prefs.getBoolean(EDIT_EMAIL_BEFORE_SENDING, false)
+        set(editEmailBeforeSending) = prefs.edit()
+            .putBoolean(EDIT_EMAIL_BEFORE_SENDING, editEmailBeforeSending)
+            .apply()
 }

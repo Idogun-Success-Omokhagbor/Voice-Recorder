@@ -29,6 +29,7 @@ import org.fossify.voicerecorder.extensions.setKeepScreenAwake
 import org.fossify.voicerecorder.activities.SimpleActivity
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
+import org.fossify.voicerecorder.helpers.EDIT_EMAIL_BEFORE_SENDING_EXTRA
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDING_PAUSED
 import org.fossify.voicerecorder.helpers.RECORDING_RUNNING
@@ -206,14 +207,18 @@ class RecorderFragment(
             return
         }
 
-        sendRecordingByEmail()
-        activity.moveTaskToBack(true)
+        val editBeforeSending = activity.config.editEmailBeforeSending
+        sendRecordingByEmail(editBeforeSending)
+        if (!editBeforeSending) {
+            activity.moveTaskToBack(true)
+        }
     }
 
-    private fun sendRecordingByEmail() {
+    private fun sendRecordingByEmail(editBeforeSending: Boolean) {
         status = RECORDING_STOPPED
         Intent(context, RecorderService::class.java).apply {
             action = EMAIL_RECORDING
+            putExtra(EDIT_EMAIL_BEFORE_SENDING_EXTRA, editBeforeSending)
             context.startService(this)
         }
         refreshView()

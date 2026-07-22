@@ -58,6 +58,16 @@ internal class RecorderSessionController {
     }
 
     @Synchronized
+    fun completeEmailComposer(): Boolean {
+        if (state != RecorderSessionState.FINALIZING_EMAIL) {
+            return false
+        }
+
+        state = RecorderSessionState.STOPPED
+        return true
+    }
+
+    @Synchronized
     fun completeSave(): Boolean {
         if (state != RecorderSessionState.FINALIZING_SAVE) {
             return false

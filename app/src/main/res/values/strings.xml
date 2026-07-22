@@ -34,6 +34,7 @@
     <string name="bitrate">Bitrate</string>
     <string name="record_after_launch">Start recording automatically after launching the app</string>
     <string name="record_and_email">Record and email</string>
+    <string name="edit_email_before_sending">Edit email before sending</string>
     <string name="keep_screen_on">Keep the screen on during recording</string>
     <string name="background_recording_warning">60 minute warning</string>
     <string name="background_recording_warning_description">Warning message after 60 minutes of background recording. There will be only one warning!</string>
@@ -61,6 +62,8 @@
     <string name="email_relay_invalid_response">The email service did not confirm delivery.</string>
     <string name="email_relay_failed">The recording was saved, but the email could not be sent.</string>
     <string name="email_sent_successfully">Recording emailed successfully</string>
+    <string name="choose_email_app">Choose email app</string>
+    <string name="no_email_app_available">No email app is available. The recording was saved locally.</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_fork_text">This app is a fork of Fossify\'s Voice Recorder</string>
     <string name="open_source_code">Open source code</string>

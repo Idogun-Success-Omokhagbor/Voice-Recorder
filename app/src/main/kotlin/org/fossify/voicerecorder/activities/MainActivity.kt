@@ -1,7 +1,11 @@
 package org.fossify.voicerecorder.activities
 
 import android.app.Activity
+import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +38,9 @@ import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
 import org.fossify.voicerecorder.helpers.AppVisibilityTracker
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
+import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
+import org.fossify.voicerecorder.helpers.email.EmailSubjectFormatter
+import org.fossify.voicerecorder.helpers.email.RecordingEmailIntentFactory
 import org.fossify.voicerecorder.models.Events
 import org.fossify.voicerecorder.services.RecorderService
 import org.greenrobot.eventbus.EventBus
@@ -43,6 +50,7 @@ import org.greenrobot.eventbus.ThreadMode
 class MainActivity : SimpleActivity() {
     companion object {
         private const val EXIT_AFTER_SAVE_DELAY_MS = 500L
+        private const val EMAIL_COMPOSER_REQUEST_CODE = 4105
     }
 
     private var bus: EventBus? = null
@@ -365,6 +373,11 @@ class MainActivity : SimpleActivity() {
     @Suppress("unused")
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun recordingSaved(event: Events.RecordingSaved) {
+        if (event.shouldOpenEmailComposer) {
+            openEmailClient(event.uri)
+            return
+        }
+
         if (!event.errorMessage.isNullOrBlank()) {
             toast(event.errorMessage)
         }
@@ -412,6 +425,65 @@ class MainActivity : SimpleActivity() {
             } catch (_: Exception) {
             }
         }
+    }
+
+    private fun openEmailClient(recordingUri: Uri?) {
+        val emailAddress = config.recordingEmailAddress
+        val emailIntent = recordingUri
+            ?.takeIf { EmailAddressValidator.isValid(emailAddress) }
+            ?.let {
+                RecordingEmailIntentFactory.create(
+                    context = this,
+                    recordingUri = it,
+                    recipient = emailAddress,
+                    subject = EmailSubjectFormatter.subject()
+                )
+            }
+
+        if (emailIntent == null) {
+            toast(R.string.no_email_app_available)
+            return
+        }
+
+        try {
+            launchEmailIntent(emailIntent)
+            finish()
+        } catch (_: Exception) {
+            toast(R.string.no_email_app_available)
+            moveTaskToBack(true)
+        }
+    }
+
+    private fun launchEmailIntent(emailIntent: Intent) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startActivity(emailIntent)
+            return
+        }
+
+        val creatorOptions = ActivityOptions.makeBasic().apply {
+            pendingIntentCreatorBackgroundActivityStartMode =
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            EMAIL_COMPOSER_REQUEST_CODE,
+            emailIntent,
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            creatorOptions.toBundle()
+        )
+        val senderOptions = ActivityOptions.makeBasic().apply {
+            pendingIntentBackgroundActivityStartMode =
+                ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+        }
+        pendingIntent.send(
+            this,
+            0,
+            null,
+            null,
+            null,
+            null,
+            senderOptions.toBundle()
+        )
     }
 
     private fun exitAppAfterSave() {

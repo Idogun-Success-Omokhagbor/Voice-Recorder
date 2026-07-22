@@ -19,6 +19,17 @@
         android:name="android.hardware.faketouch"
         android:required="false" />
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="audio/*" />
+        </intent>
+    </queries>
+
     <!--suppress DeprecatedClassUsageInspection -->
     <uses-permission
         android:name="android.permission.USE_FINGERPRINT"

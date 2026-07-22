@@ -14,6 +14,7 @@ class Events {
         val uri: Uri?,
         val isEmail: Boolean = false,
         val shouldExit: Boolean = true,
+        val shouldOpenEmailComposer: Boolean = false,
         val errorMessage: String? = null
     )
 }

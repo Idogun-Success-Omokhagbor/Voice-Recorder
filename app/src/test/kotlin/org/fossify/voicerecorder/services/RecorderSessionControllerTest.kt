@@ -69,6 +69,16 @@ class RecorderSessionControllerTest {
     }
 
     @Test
+    fun `edit before sending completes without starting relay upload`() {
+        val controller = recordingController()
+
+        assertTrue(controller.requestStop(RecorderStopRequest.EMAIL))
+        assertTrue(controller.completeEmailComposer())
+        assertFalse(controller.beginUpload())
+        assertEquals(RecorderSessionState.STOPPED, controller.currentState())
+    }
+
+    @Test
     fun `stop failure returns session to stopped`() {
         val controller = recordingController()
         assertTrue(controller.requestStop(RecorderStopRequest.SAVE))

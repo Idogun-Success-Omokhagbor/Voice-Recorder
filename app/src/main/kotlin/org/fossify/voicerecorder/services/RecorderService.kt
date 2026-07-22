@@ -43,6 +43,7 @@ import org.fossify.voicerecorder.helpers.AppVisibilityTracker
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
 import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
+import org.fossify.voicerecorder.helpers.EDIT_EMAIL_BEFORE_SENDING_EXTRA
 import org.fossify.voicerecorder.helpers.EXIT_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDER_RUNNING_NOTIF_ID
@@ -64,6 +65,7 @@ import java.io.File
 import java.util.Timer
 import java.util.TimerTask
 
+@Suppress("LargeClass")
 class RecorderService : Service() {
     companion object {
         private const val AMPLITUDE_UPDATE_MS = 75L
@@ -104,6 +106,8 @@ class RecorderService : Service() {
     @Volatile
     private var backgroundWarningPending = false
 
+    private var editEmailBeforeSending = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -126,7 +130,10 @@ class RecorderService : Service() {
             TOGGLE_RECORDING -> toggleRecordingFromWidget()
             SAVE_RECORDING -> requestStop(RecorderStopRequest.SAVE)
             CANCEL_RECORDING -> cancelRecording()
-            EMAIL_RECORDING -> requestStop(RecorderStopRequest.EMAIL)
+            EMAIL_RECORDING -> requestStop(
+                RecorderStopRequest.EMAIL,
+                intent.getBooleanExtra(EDIT_EMAIL_BEFORE_SENDING_EXTRA, false)
+            )
             CONTINUE_RECORDING_AFTER_WARNING -> continueAfterBackgroundWarning()
             EXIT_RECORDING_AFTER_WARNING -> cancelRecording(exitAfterCancellation = true)
             else -> startRecording()
@@ -264,7 +271,10 @@ class RecorderService : Service() {
         }
     }
 
-    private fun requestStop(request: RecorderStopRequest) {
+    private fun requestStop(
+        request: RecorderStopRequest,
+        editEmailBeforeSending: Boolean = false
+    ) {
         if (!session.requestStop(request)) {
             if (session.currentState() == RecorderSessionState.STOPPED) {
                 finishService()
@@ -272,11 +282,13 @@ class RecorderService : Service() {
             return
         }
 
+        this.editEmailBeforeSending = request == RecorderStopRequest.EMAIL && editEmailBeforeSending
+
         backgroundWarningPending = false
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
-        if (request == RecorderStopRequest.EMAIL) {
+        if (request == RecorderStopRequest.EMAIL && !editEmailBeforeSending) {
             startForeground(
                 RECORDER_RUNNING_NOTIF_ID,
                 showNotification(sendingEmail = true)
@@ -436,9 +448,30 @@ class RecorderService : Service() {
         EventBus.getDefault().post(Events.RecordingCompleted())
         when (request) {
             RecorderStopRequest.SAVE -> completeSave(recordingUri)
-            RecorderStopRequest.EMAIL -> beginEmailUpload(recordingUri)
+            RecorderStopRequest.EMAIL -> {
+                if (editEmailBeforeSending) {
+                    completeEmailComposer(recordingUri)
+                } else {
+                    beginEmailUpload(recordingUri)
+                }
+            }
             RecorderStopRequest.CANCEL -> failFinalization()
         }
+    }
+
+    private fun completeEmailComposer(recordingUri: Uri) {
+        if (session.completeEmailComposer()) {
+            EventBus.getDefault().post(
+                Events.RecordingSaved(
+                    uri = recordingUri,
+                    isEmail = true,
+                    shouldExit = false,
+                    shouldOpenEmailComposer = true
+                )
+            )
+        }
+        editEmailBeforeSending = false
+        finishService()
     }
 
     private fun completeSave(recordingUri: Uri) {
@@ -475,17 +508,18 @@ class RecorderService : Service() {
         val completion = session.completeEmail(result.success) ?: return
         if (completion.shouldVibrate) {
             emailDelivery.vibrate()
-        } else {
-            toast(result.message)
         }
 
         EventBus.getDefault().post(
             Events.RecordingSaved(
                 uri = recordingUri,
                 isEmail = true,
-                shouldExit = completion.shouldExit
+                shouldExit = completion.shouldExit,
+                shouldOpenEmailComposer = !result.success,
+                errorMessage = result.message.takeUnless { result.success }
             )
         )
+        editEmailBeforeSending = false
         finishService()
         if (completion.shouldExit) {
             terminateProcessAfterDelay()
