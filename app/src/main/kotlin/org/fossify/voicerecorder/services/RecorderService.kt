@@ -1,6 +1,7 @@
 package org.fossify.voicerecorder.services
 
 import android.annotation.SuppressLint
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,6 +13,7 @@ import android.media.AudioAttributes
 import android.media.MediaScannerConnection
 import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -45,6 +47,7 @@ import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
 import org.fossify.voicerecorder.helpers.EDIT_EMAIL_BEFORE_SENDING_EXTRA
 import org.fossify.voicerecorder.helpers.EXIT_RECORDING_AFTER_WARNING
+import org.fossify.voicerecorder.helpers.FullScreenWarningPermission
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDER_RUNNING_NOTIF_ID
 import org.fossify.voicerecorder.helpers.RECORDING_PAUSED
@@ -528,11 +531,15 @@ class RecorderService : Service() {
 
     private fun showBackgroundRecordingWarning() {
         backgroundWarningPending = true
-        EventBus.getDefault().post(Events.BackgroundRecordingWarning())
+        val openWarningIntent = getWarningActivityIntent()
         startForeground(
             RECORDER_RUNNING_NOTIF_ID,
-            showBackgroundRecordingWarningNotification()
+            showBackgroundRecordingWarningNotification(openWarningIntent)
         )
+        if (FullScreenWarningPermission.isGranted(this)) {
+            launchBackgroundRecordingWarning(openWarningIntent)
+        }
+        EventBus.getDefault().post(Events.BackgroundRecordingWarning())
     }
 
     private fun continueAfterBackgroundWarning() {
@@ -625,7 +632,9 @@ class RecorderService : Service() {
             .build()
     }
 
-    private fun showBackgroundRecordingWarningNotification(): Notification {
+    private fun showBackgroundRecordingWarningNotification(
+        openWarningIntent: PendingIntent
+    ): Notification {
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
@@ -644,7 +653,6 @@ class RecorderService : Service() {
         }
 
         val warningMessage = getString(R.string.background_recording_warning_message)
-        val openWarningIntent = getWarningActivityIntent()
         return NotificationCompat.Builder(this, WARNING_NOTIFICATION_CHANNEL_ID)
             .setContentTitle(getString(R.string.background_recording_warning))
             .setContentText(warningMessage)
@@ -697,12 +705,48 @@ class RecorderService : Service() {
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
+        val creatorOptions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ActivityOptions.makeBasic().apply {
+                @Suppress("DEPRECATION")
+                pendingIntentCreatorBackgroundActivityStartMode =
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }.toBundle()
+        } else {
+            null
+        }
         return PendingIntent.getActivity(
             this,
             OPEN_WARNING_REQUEST_CODE,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            creatorOptions
         )
+    }
+
+    private fun launchBackgroundRecordingWarning(pendingIntent: PendingIntent) {
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                pendingIntent.send()
+                return
+            }
+
+            val senderOptions = ActivityOptions.makeBasic().apply {
+                @Suppress("DEPRECATION")
+                pendingIntentBackgroundActivityStartMode =
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+            pendingIntent.send(
+                this,
+                0,
+                null,
+                null,
+                null,
+                null,
+                senderOptions.toBundle()
+            )
+        } catch (_: PendingIntent.CanceledException) {
+            // The persistent notification remains available as a fallback.
+        }
     }
 
     private fun getRecorderActionIntent(action: String, requestCode: Int): PendingIntent {

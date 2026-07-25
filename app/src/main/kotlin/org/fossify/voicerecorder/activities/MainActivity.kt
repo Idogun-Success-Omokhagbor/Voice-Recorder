@@ -12,6 +12,7 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import me.grantland.widget.AutofitHelper
 import org.fossify.commons.extensions.appLaunched
@@ -36,6 +37,7 @@ import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
 import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
 import org.fossify.voicerecorder.helpers.AppVisibilityTracker
+import org.fossify.voicerecorder.helpers.FullScreenWarningPermission
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
@@ -56,6 +58,7 @@ class MainActivity : SimpleActivity() {
     private var bus: EventBus? = null
     private var launchedSettings = false
     private var checkingAutoRecordNotificationPermission = false
+    private var requestingBackgroundWarningPermission = false
 
     override var isSearchBarEnabled = true
 
@@ -99,6 +102,7 @@ class MainActivity : SimpleActivity() {
         setupTabColors()
         getPagerAdapter()?.onResume()
         selectRecorderAfterSettingsReturnIfNeeded()
+        maybeRequestBackgroundWarningPermission()
         startRecordingIfConfigured()
         sendRecorderAction(GET_RECORDER_INFO)
     }
@@ -339,6 +343,30 @@ class MainActivity : SimpleActivity() {
                 launchSettings()
             }
         }
+    }
+
+    private fun maybeRequestBackgroundWarningPermission() {
+        if (!config.backgroundRecordingWarning ||
+            requestingBackgroundWarningPermission ||
+            FullScreenWarningPermission.isGranted(this)
+        ) {
+            return
+        }
+
+        requestingBackgroundWarningPermission = true
+        AlertDialog.Builder(this)
+            .setTitle(R.string.allow_background_warning)
+            .setMessage(R.string.allow_background_warning_description)
+            .setPositiveButton(R.string.open_settings) { _, _ ->
+                if (!FullScreenWarningPermission.openSettings(this)) {
+                    toast(R.string.warning_settings_unavailable)
+                }
+            }
+            .setNegativeButton(R.string.not_now, null)
+            .setOnDismissListener {
+                requestingBackgroundWarningPermission = false
+            }
+            .show()
     }
 
     private fun setupTabColors() {
