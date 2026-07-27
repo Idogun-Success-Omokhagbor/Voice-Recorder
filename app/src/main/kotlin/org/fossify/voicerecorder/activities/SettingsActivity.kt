@@ -37,7 +37,7 @@ import org.fossify.voicerecorder.helpers.DEFAULT_BITRATE
 import org.fossify.voicerecorder.helpers.DEFAULT_SAMPLING_RATE
 import org.fossify.voicerecorder.helpers.EXTENSION_M4A
 import org.fossify.voicerecorder.helpers.EXTENSION_OGG
-import org.fossify.voicerecorder.helpers.FullScreenWarningPermission
+import org.fossify.voicerecorder.helpers.BackgroundWarningPermission
 import org.fossify.voicerecorder.helpers.SAMPLING_RATES
 import org.fossify.voicerecorder.helpers.SAMPLING_RATE_BITRATE_LIMITS
 import org.fossify.voicerecorder.models.Events
@@ -345,8 +345,8 @@ class SettingsActivity : SimpleActivity() {
             binding.settingsBackgroundRecordingWarning.toggle()
             val enabled = binding.settingsBackgroundRecordingWarning.isChecked
             config.backgroundRecordingWarning = enabled
-            if (enabled && !FullScreenWarningPermission.isGranted(this)) {
-                if (!FullScreenWarningPermission.openSettings(this)) {
+            if (enabled && !BackgroundWarningPermission.isGranted(this)) {
+                if (!BackgroundWarningPermission.openSettings(this)) {
                     toast(R.string.warning_settings_unavailable)
                 }
             }

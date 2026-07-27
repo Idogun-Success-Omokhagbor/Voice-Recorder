@@ -37,7 +37,7 @@ import org.fossify.voicerecorder.extensions.config
 import org.fossify.voicerecorder.extensions.deleteExpiredTrashedRecordings
 import org.fossify.voicerecorder.extensions.ensureDefaultRecordingsFolderExists
 import org.fossify.voicerecorder.helpers.AppVisibilityTracker
-import org.fossify.voicerecorder.helpers.FullScreenWarningPermission
+import org.fossify.voicerecorder.helpers.BackgroundWarningPermission
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.STOP_AMPLITUDE_UPDATE
 import org.fossify.voicerecorder.helpers.email.EmailAddressValidator
@@ -214,12 +214,22 @@ class MainActivity : SimpleActivity() {
     private fun handleAudioPermissionAndSetup() {
         handlePermission(PERMISSION_RECORD_AUDIO) {
             if (it) {
-                handleNotificationPermission {
-                    setupViewPager()
-                }
+                requestNotificationPermissionAndSetup()
             } else {
                 toast(org.fossify.commons.R.string.no_audio_permissions)
                 finish()
+            }
+        }
+    }
+
+    private fun requestNotificationPermissionAndSetup() {
+        Handler(Looper.getMainLooper()).post {
+            if (isFinishing || isDestroyed) {
+                return@post
+            }
+
+            handleNotificationPermission {
+                setupViewPager()
             }
         }
     }
@@ -348,7 +358,7 @@ class MainActivity : SimpleActivity() {
     private fun maybeRequestBackgroundWarningPermission() {
         if (!config.backgroundRecordingWarning ||
             requestingBackgroundWarningPermission ||
-            FullScreenWarningPermission.isGranted(this)
+            BackgroundWarningPermission.isGranted(this)
         ) {
             return
         }
@@ -358,7 +368,7 @@ class MainActivity : SimpleActivity() {
             .setTitle(R.string.allow_background_warning)
             .setMessage(R.string.allow_background_warning_description)
             .setPositiveButton(R.string.open_settings) { _, _ ->
-                if (!FullScreenWarningPermission.openSettings(this)) {
+                if (!BackgroundWarningPermission.openSettings(this)) {
                     toast(R.string.warning_settings_unavailable)
                 }
             }

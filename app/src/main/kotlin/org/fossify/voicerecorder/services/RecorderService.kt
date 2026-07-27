@@ -42,12 +42,12 @@ import org.fossify.voicerecorder.extensions.getFormattedFilename
 import org.fossify.voicerecorder.extensions.shouldUseMediaStoreRecordings
 import org.fossify.voicerecorder.extensions.updateWidgets
 import org.fossify.voicerecorder.helpers.AppVisibilityTracker
+import org.fossify.voicerecorder.helpers.BackgroundWarningPermission
 import org.fossify.voicerecorder.helpers.CANCEL_RECORDING
 import org.fossify.voicerecorder.helpers.CONTINUE_RECORDING_AFTER_WARNING
 import org.fossify.voicerecorder.helpers.EMAIL_RECORDING
 import org.fossify.voicerecorder.helpers.EDIT_EMAIL_BEFORE_SENDING_EXTRA
 import org.fossify.voicerecorder.helpers.EXIT_RECORDING_AFTER_WARNING
-import org.fossify.voicerecorder.helpers.FullScreenWarningPermission
 import org.fossify.voicerecorder.helpers.GET_RECORDER_INFO
 import org.fossify.voicerecorder.helpers.RECORDER_RUNNING_NOTIF_ID
 import org.fossify.voicerecorder.helpers.RECORDING_PAUSED
@@ -75,6 +75,7 @@ class RecorderService : Service() {
         private const val PROCESS_EXIT_DELAY_MS = 500L
         private const val RECORDING_NOTIFICATION_CHANNEL_ID = "simple_recorder"
         private const val WARNING_NOTIFICATION_CHANNEL_ID = "background_recording_warning_v2"
+        private const val BACKGROUND_WARNING_NOTIFICATION_ID = 10005
         private const val CONTINUE_WARNING_REQUEST_CODE = 10001
         private const val SAVE_WARNING_REQUEST_CODE = 10002
         private const val EXIT_WARNING_REQUEST_CODE = 10003
@@ -155,7 +156,7 @@ class RecorderService : Service() {
         }
 
         session.fail()
-        backgroundWarningPending = false
+        clearBackgroundWarning()
         status = RECORDING_STOPPED
         stopForeground(STOP_FOREGROUND_REMOVE)
         updateWidgets(false)
@@ -173,7 +174,7 @@ class RecorderService : Service() {
 
         resetRecordingOutput()
         backgroundWarningController.reset()
-        backgroundWarningPending = false
+        clearBackgroundWarning()
         updateWidgets(true)
 
         val defaultFolder = File(config.saveRecordingsFolder)
@@ -287,7 +288,7 @@ class RecorderService : Service() {
 
         this.editEmailBeforeSending = request == RecorderStopRequest.EMAIL && editEmailBeforeSending
 
-        backgroundWarningPending = false
+        clearBackgroundWarning()
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
@@ -337,7 +338,7 @@ class RecorderService : Service() {
             return
         }
 
-        backgroundWarningPending = false
+        clearBackgroundWarning()
         cancelRecordingTimers()
         setStatus(RECORDING_STOPPED)
         broadcastStatus()
@@ -532,11 +533,14 @@ class RecorderService : Service() {
     private fun showBackgroundRecordingWarning() {
         backgroundWarningPending = true
         val openWarningIntent = getWarningActivityIntent()
-        startForeground(
-            RECORDER_RUNNING_NOTIF_ID,
-            showBackgroundRecordingWarningNotification(openWarningIntent)
-        )
-        if (FullScreenWarningPermission.isGranted(this)) {
+        val warningNotification = showBackgroundRecordingWarningNotification(openWarningIntent)
+        try {
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(BACKGROUND_WARNING_NOTIFICATION_ID, warningNotification)
+        } catch (_: SecurityException) {
+            // The direct activity launch remains available when notifications are blocked.
+        }
+        if (BackgroundWarningPermission.isGranted(this)) {
             launchBackgroundRecordingWarning(openWarningIntent)
         }
         EventBus.getDefault().post(Events.BackgroundRecordingWarning())
@@ -550,7 +554,7 @@ class RecorderService : Service() {
             return
         }
 
-        backgroundWarningPending = false
+        clearBackgroundWarning()
         if (session.isRecording()) {
             startForeground(RECORDER_RUNNING_NOTIF_ID, showNotification())
         }
@@ -562,14 +566,21 @@ class RecorderService : Service() {
         }
 
         deleteCurrentRecordingOutput()
-        backgroundWarningPending = false
+        clearBackgroundWarning()
         EventBus.getDefault().post(Events.RecordingCompleted())
         finishService()
     }
 
     private fun finishService() {
+        clearBackgroundWarning()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun clearBackgroundWarning() {
+        backgroundWarningPending = false
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(BACKGROUND_WARNING_NOTIFICATION_ID)
     }
 
     private fun getDurationUpdateTask() = object : TimerTask() {
@@ -709,7 +720,7 @@ class RecorderService : Service() {
             ActivityOptions.makeBasic().apply {
                 @Suppress("DEPRECATION")
                 pendingIntentCreatorBackgroundActivityStartMode =
-                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    getBackgroundActivityStartMode()
             }.toBundle()
         } else {
             null
@@ -733,7 +744,7 @@ class RecorderService : Service() {
             val senderOptions = ActivityOptions.makeBasic().apply {
                 @Suppress("DEPRECATION")
                 pendingIntentBackgroundActivityStartMode =
-                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    getBackgroundActivityStartMode()
             }
             pendingIntent.send(
                 this,
@@ -746,6 +757,16 @@ class RecorderService : Service() {
             )
         } catch (_: PendingIntent.CanceledException) {
             // The persistent notification remains available as a fallback.
+        }
+    }
+
+    @SuppressLint("NewApi")
+    private fun getBackgroundActivityStartMode(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS
+        } else {
+            @Suppress("DEPRECATION")
+            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
         }
     }
 

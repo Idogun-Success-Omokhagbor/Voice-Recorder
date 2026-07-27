@@ -40,10 +40,10 @@
     <string name="background_recording_warning_description">Warning message after 60 minutes of background recording. There will be only one warning!</string>
     <string name="background_recording_warning_message">Voice Recorder Plus has been recording for 60 minutes.</string>
     <string name="allow_background_warning">Allow 60 minute warning</string>
-    <string name="allow_background_warning_description">To show the 60 minute warning over other apps, allow full-screen notifications for Voice Recorder Plus.</string>
+    <string name="allow_background_warning_description">To keep the 60 minute warning visible over other apps until you choose an action, allow Voice Recorder Plus to display over other apps.</string>
     <string name="open_settings">Open settings</string>
     <string name="not_now">Not now</string>
-    <string name="warning_settings_unavailable">Unable to open the full-screen notification setting.</string>
+    <string name="warning_settings_unavailable">Unable to open the display over other apps setting.</string>
     <string name="continue_recording">Continue</string>
     <string name="save_and_exit">Save and exit</string>
     <string name="exit_without_saving">Exit</string>
